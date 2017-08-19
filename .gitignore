@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# Pictures
+*.png
+
+#python
+*.pyc
