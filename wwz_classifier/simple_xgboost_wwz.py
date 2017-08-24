@@ -8,8 +8,8 @@ import root_pandas as rp
 import numpy as np
 
 ##Getting ROOT files into pandas
-df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt'])
-df_bkg = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt'])
+df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
+df_bkg = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
 
 
 # print df_signal.head()
@@ -30,14 +30,18 @@ test_size = 0.2
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-model = XGBClassifier()
+model = XGBClassifier(max_depth=8, gamma=1, silent=True)
 model.fit(x_train, y_train)
 
-print( dir(model) )
+#print( dir(model) )
+print model
 
 # make predictions for test data
-y_pred = model.predict(x_test)
+#y_pred = model.predict(x_test)
+y_pred = model.predict_proba(x_test)[:, 1]
 predictions = [round(value) for value in y_pred]
+
+print y_pred
 
 # evaluate predictions
 accuracy = accuracy_score(y_test, predictions)
