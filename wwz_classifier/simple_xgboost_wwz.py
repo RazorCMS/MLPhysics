@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 from xgboost import XGBClassifier
+from xgboost import plot_tree
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_curve
 import root_pandas as rp
@@ -12,7 +13,7 @@ import math
 
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
-variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','ZPt']
+variables = ['MET']
 
 ##Getting ROOT files into pandas
 #df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
@@ -55,11 +56,13 @@ test_size = 0.2
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-model = XGBClassifier(max_depth=8, gamma=1, silent=True)
+model = XGBClassifier(max_depth=1, n_estimators=1, gamma=1, silent=True)
 model.fit(x_train, y_train, sample_weight=sample_weights)
 
 #print( dir(model) )
 print model
+
+
 
 # make predictions for test data
 #y_pred = model.predict(x_test)
@@ -130,3 +133,6 @@ plt.figure()
 plt.bar(range(len(model.feature_importances_)), model.feature_importances_)
 #plt.show()
 plt.savefig('myImportances.png')
+
+plot_tree( model )
+plt.savefig('myTree.png')
