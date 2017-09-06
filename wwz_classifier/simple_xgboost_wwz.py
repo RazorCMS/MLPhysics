@@ -12,8 +12,7 @@ import math
 
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
-
-variables = ['MET']
+variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','ZPt']
 
 ##Getting ROOT files into pandas
 #df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
@@ -94,34 +93,40 @@ plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('Receiver operating characteristic example')
 plt.legend(loc="lower right")
-plt.show()
+#plt.show()
 plt.savefig('myroc.png')
 
 
 ## plot S/sqrt(B)
 significance = []
-
+effSignal = []
+lumi = 80.
 print len(fpr)
 ctr = 0
 for i in range(len(fpr)):
     if fpr[i] != 0:
-        significance.append(9.88*tpr[i]/math.sqrt(fpr[i]))
-        print significance[ctr], ' ' , fpr[ctr], ' ', tpr[ctr]
+        significance.append(math.sqrt(lumi)*4.96*0.0232*tpr[i]/math.sqrt(fpr[i]*0.9768))
+        effSignal.append(tpr[ctr])
+        #print significance[ctr], ' ' , fpr[ctr], ' ', tpr[ctr]
         ctr = ctr + 1
-    
-# plt.plot(fpr, tpr, color='darkorange',
-#          lw=lw, label='ROC curve')
-# plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-# plt.xlim([0.0, 1.0])
-# plt.ylim([0.0, 1.05])
-# plt.xlabel('False Positive Rate')
-# plt.ylabel('True Positive Rate')
-# plt.title('Receiver operating characteristic example')
-# plt.legend(loc="lower right")
-# plt.show()
-# plt.savefig('myroc.png')
+
+
+plt.figure()
+plt.plot(effSignal, significance, color='darkorange',
+         lw=lw, label='s/sqrt(B)')
+plt.plot([0, 1], [0, 10], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 10.01])
+plt.xlabel('signal eff')
+plt.ylabel('sigificance')
+plt.title('significance')
+plt.legend(loc="lower right")
+#plt.show()
+plt.savefig('significance.png')
+
 
 # Plot
+plt.figure()
 plt.bar(range(len(model.feature_importances_)), model.feature_importances_)
-plt.show()
+#plt.show()
 plt.savefig('myImportances.png')
