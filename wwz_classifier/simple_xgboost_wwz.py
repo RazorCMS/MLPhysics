@@ -13,7 +13,7 @@ import math
 
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
-variables = ['MET']
+variables = ['MET','ZMass']
 
 ##Getting ROOT files into pandas
 #df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
@@ -69,6 +69,8 @@ print model
 y_pred = model.predict_proba(x_test)[:, 1]
 predictions = [round(value) for value in y_pred]
 
+print y_pred
+
 # make histogram of discriminator value for signal and bkg
 pd.DataFrame({'truth':y_test, 'disc':y_pred}).hist(column='disc', by='truth', bins=50)
 
@@ -82,8 +84,8 @@ print("Accuracy: %.2f%%" % (accuracy * 100.0))
 #roc = roc_curve(y_test, y_pred)
 fpr, tpr, _ = roc_curve(y_test, y_pred)
 
-print fpr
-print tpr
+print "False Positive Rate: ", fpr
+print "True Positive Rate: ", tpr
 #plot roc curve
 plt.figure()
 lw = 2
@@ -103,17 +105,22 @@ plt.savefig('myroc.png')
 ## plot S/sqrt(B)
 significance = []
 effSignal = []
-lumi = 80.
+lumi = 100.
 print len(fpr)
+
 ctr = 0
 for i in range(len(fpr)):
-    if fpr[i] != 0:
+    if fpr[i] > 1e-5 and tpr[i] > 1e-5:
+        print fpr[i], tpr[i] 
         significance.append(math.sqrt(lumi)*4.96*0.0232*tpr[i]/math.sqrt(fpr[i]*0.9768))
-        effSignal.append(tpr[ctr])
+        effSignal.append(tpr[i])
         #print significance[ctr], ' ' , fpr[ctr], ' ', tpr[ctr]
         ctr = ctr + 1
 
 
+print "signal Eff: ", effSignal        
+print "significance:", significance
+        
 plt.figure()
 plt.plot(effSignal, significance, color='darkorange',
          lw=lw, label='s/sqrt(B)')
