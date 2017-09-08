@@ -74,22 +74,22 @@ void WWZAnalysis::Loop()
      leadLeptonPt = leptonPtVector[3];
      subleadLeptonPt = leptonPtVector[2];
 
-     //if (!(leadLeptonPt > 25 && subleadLeptonPt > 15)) continue;
+     if (!(leadLeptonPt > 25 && subleadLeptonPt > 15)) continue;
      
      //ZMass Window
-     //if (!(ZMass > 76 && ZMass < 106)) continue;
+     if (!(ZMass > 76 && ZMass < 106)) continue;
      
      //Opposite Charge on Lep3 and Lep4
-     //if ( abs(lep3Id)/lep3Id ==  abs(lep4Id)/lep4Id ) continue;
+     if ( abs(lep3Id)/lep3Id ==  abs(lep4Id)/lep4Id ) continue;
      
      //2nd Z Veto
      //if ( fabs(vLep34.M() - 91) < 15 ) continue;
      
      //MET 
-     if (!(MET > 46)) continue;
+     if (!(MET > 50)) continue;
      
      //BJet Veto
-     //if (!(NBJet20 == 0)) continue;
+     if (!(NBJet20 == 0)) continue;
      
      //Jet Veto
      //if (!(NJet30 == 0)) continue;
@@ -99,7 +99,7 @@ void WWZAnalysis::Loop()
      //Categories
      //******************************
      //Difference Flavor
-     //if ( abs(lep3Id) == abs(lep4Id) ) continue;
+     if ( abs(lep3Id) == abs(lep4Id) ) continue;
      
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
@@ -108,6 +108,7 @@ void WWZAnalysis::Loop()
      
    }
 
-   std::cout << "nevents: " << npassed*1000.0*35.9 << std::endl;
+   std::cout << "nevents: " << npassed*1000.0*100. << std::endl;
+   std::cout << "nevents total: " << ntotal << std::endl;
    std::cout << "eff:" <<  npassed/ntotal << std::endl;
 }

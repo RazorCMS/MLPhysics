@@ -13,7 +13,8 @@ import math
 
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
-variables = ['MET','ZMass']
+variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NBJet20','ZMass','lep3Id', 'lep4Id']
+#variables = ['MET']
 
 ##Getting ROOT files into pandas
 #df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
@@ -56,7 +57,8 @@ test_size = 0.2
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-model = XGBClassifier(max_depth=1, n_estimators=1, gamma=1, silent=True)
+#model = XGBClassifier(max_depth=8, n_estimators=1, gamma=1, silent=True)
+model = XGBClassifier(max_depth=4, gamma=1, silent=True)
 model.fit(x_train, y_train, sample_weight=sample_weights)
 
 #print( dir(model) )
@@ -105,6 +107,7 @@ plt.savefig('myroc.png')
 ## plot S/sqrt(B)
 significance = []
 effSignal = []
+effBkg = []
 lumi = 100.
 print len(fpr)
 
@@ -112,8 +115,9 @@ ctr = 0
 for i in range(len(fpr)):
     if fpr[i] > 1e-5 and tpr[i] > 1e-5:
         print fpr[i], tpr[i] 
-        significance.append(math.sqrt(lumi)*4.96*0.0232*tpr[i]/math.sqrt(fpr[i]*0.9768))
+        significance.append(math.sqrt(lumi)*4.9273121112*0.006301956534*tpr[i]/math.sqrt(fpr[i]*0.9936980435))
         effSignal.append(tpr[i])
+        effBkg.append(fpr[i])
         #print significance[ctr], ' ' , fpr[ctr], ' ', tpr[ctr]
         ctr = ctr + 1
 
@@ -124,15 +128,30 @@ print "significance:", significance
 plt.figure()
 plt.plot(effSignal, significance, color='darkorange',
          lw=lw, label='s/sqrt(B)')
-plt.plot([0, 1], [0, 10], color='navy', lw=lw, linestyle='--')
+#plt.plot([0, 1], [0, 10], color='navy', lw=lw, linestyle='--')
 plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 10.01])
+plt.ylim([0.0, 3.01])
 plt.xlabel('signal eff')
 plt.ylabel('sigificance')
 plt.title('significance')
 plt.legend(loc="lower right")
 #plt.show()
 plt.savefig('significance.png')
+
+
+plt.figure()
+plt.plot(effBkg, significance, color='darkorange',
+         lw=lw, label='s/sqrt(B)')
+#plt.plot([0, 1], [0, 10], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, .2])
+plt.ylim([0.0, 3.01])
+plt.xlabel('bkg eff')
+plt.ylabel('sigificance')
+plt.title('significance')
+plt.legend(loc="lower right")
+#plt.show()
+plt.savefig('significance_bkg.png')
+
 
 
 # Plot
@@ -143,3 +162,5 @@ plt.savefig('myImportances.png')
 
 plot_tree( model )
 plt.savefig('myTree.png')
+
+print "MAXIMUM SIGNIFICANCE = ", max(significance)
