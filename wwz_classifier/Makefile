@@ -9,18 +9,26 @@ LDFLAGS := $(shell root-config --glibs)
 CPPFLAGS += -g -std=c++14
 
 TARGET = wwz_ana
-SRC = main_WWZAnalysis.cc WWZAnalysis.cc
+TARGET1 = copyTree
+
+SRC = app/main_WWZAnalysis.cc src/WWZAnalysis.cc
+SRC1 = app/copyTree.cc
 
 OBJ = $(SRC:.cc=.o)
+OBJ1 =$(SRC1:.cc=.o) 
 
-all : $(TARGET)
+all : $(TARGET) $(TARGET1)
 
 $(TARGET) : $(OBJ)
 	@echo $@
 	$(LD) $(CPPFLAGS) -o $(TARGET) $(OBJ) $(LDFLAGS)
 
+$(TARGET1) : $(OBJ1)
+	@echo $@
+	$(LD) $(CPPFLAGS) -o $(TARGET1) $(OBJ1) $(LDFLAGS)
+
 %.o : %.cc
 	@echo $@
 	$(CXX) $(CPPFLAGS) -o $@ -c $<
 clean :
-	rm -f *.o src/*.o $(Aux)/src/*.o $(TARGET) $(TARGET2) $(TARGET3) *~
+	rm -f *.o src/*.o $(Aux)/src/*.o $(TARGET) $(TARGET1) *~
