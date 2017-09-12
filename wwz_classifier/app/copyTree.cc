@@ -12,7 +12,7 @@
 int main( )
 {
   gROOT->Reset();
-  TFile *oldfile = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8.root");
+  TFile *oldfile = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root");
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
   TH1F* nevents = (TH1F*)oldfile->Get("NEvents");
   Long64_t nentries = oldtree->GetEntries();
@@ -94,7 +94,7 @@ int main( )
      double subleadLeptonPt = leptonPtVector.at(1);
 
      if ( !(leadLeptonPt > 25. && subleadLeptonPt > 15.) ) continue;
-     
+     if ( lep3Id == lep4Id ) continue;
      
      newtree->Fill();
   }

@@ -9,6 +9,7 @@ import root_pandas as rp
 import numpy as np
 import pandas as pd
 import math
+import cPickle as pickle
 
 
 ##Define variables to be used
@@ -44,7 +45,7 @@ weights_sign_bkg = weights_bkg
 
 ##Getting a numpy array out of two pandas data frame
 sample_weights = np.concatenate([weights_sign_bkg.values, weights_sign_signal.values])
-print sample_weights
+#print sample_weights
 
 #getting a numpy array from two pandas data frames
 x = np.concatenate([df_bkg.values,df_signal.values])
@@ -64,7 +65,7 @@ model = XGBClassifier(max_depth=2, gamma=1, silent=True)
 model.fit(x_train, y_train)
 
 #print( dir(model) )
-print model
+#print model
 
 
 
@@ -73,12 +74,21 @@ print model
 y_pred = model.predict_proba(x_test)[:, 1]
 predictions = [round(value) for value in y_pred]
 
-print y_pred
-
+#print y_pred
+##########################################################
 # make histogram of discriminator value for signal and bkg
-pd.DataFrame({'truth':y_test, 'disc':y_pred}).hist(column='disc', by='truth', bins=50)
-
-print y_pred
+##########################################################
+#pd.DataFrame({'truth':y_test, 'disc':y_pred}).hist(column='disc', by='truth', bins=50)
+y_frame = pd.DataFrame({'truth':y_test, 'disc':y_pred})
+disc_bkg    = y_frame[y_frame['truth'] == 0]['disc'].values
+disc_signal = y_frame[y_frame['truth'] == 1]['disc'].values
+plt.figure()
+plt.hist(disc_bkg, normed=True, bins=50, alpha=0.3)
+plt.hist(disc_signal, normed=True, bins=50, alpha=0.3)
+plt.savefig('mydiscriminator.png')
+print "disc_bkg: ", disc_bkg
+print "disc_signal: ", disc_signal
+#print y_pred
 
 # evaluate predictions
 accuracy = accuracy_score(y_test, predictions)
@@ -88,8 +98,8 @@ print("Accuracy: %.2f%%" % (accuracy * 100.0))
 #roc = roc_curve(y_test, y_pred)
 fpr, tpr, _ = roc_curve(y_test, y_pred)
 
-print "False Positive Rate: ", fpr
-print "True Positive Rate: ", tpr
+#print "False Positive Rate: ", fpr
+#print "True Positive Rate: ", tpr
 #plot roc curve
 plt.figure()
 lw = 2
@@ -111,12 +121,12 @@ significance = []
 effSignal = []
 effBkg = []
 lumi = 100.
-print len(fpr)
+#print len(fpr)
 
 ctr = 0
 for i in range(len(fpr)):
     if fpr[i] > 1e-5 and tpr[i] > 1e-5:
-        print fpr[i], tpr[i] 
+        #print fpr[i], tpr[i] 
         significance.append(math.sqrt(lumi)*4.8742592356*0.006431528796*tpr[i]/math.sqrt(fpr[i]*0.9935684712))
         effSignal.append(tpr[i])
         effBkg.append(fpr[i])
@@ -124,8 +134,8 @@ for i in range(len(fpr)):
         ctr = ctr + 1
 
 
-print "signal Eff: ", effSignal        
-print "significance:", significance
+#print "signal Eff: ", effSignal        
+#print "significance:", significance
         
 plt.figure()
 plt.plot(effSignal, significance, color='darkorange',
@@ -166,3 +176,10 @@ plot_tree( model )
 plt.savefig('myTree.png')
 
 print "MAXIMUM SIGNIFICANCE = ", max(significance)
+
+
+output = open('model.pkl', 'wb')
+
+# Pickle dictionary using protocol 0.
+pickle.dump(model, output)
+output.close()
