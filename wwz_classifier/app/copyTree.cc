@@ -7,12 +7,15 @@
 #include <TH1F.h>
 #include <TROOT.h>
 #include <TLorentzVector.h>
+#include <TString.h>
 
 
 int main( )
 {
   gROOT->Reset();
-  TFile *oldfile = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root");
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8";
+  TFile *oldfile = new TFile(sampleName+".root");
+
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
   TH1F* nevents = (TH1F*)oldfile->Get("NEvents");
   Long64_t nentries = oldtree->GetEntries();
@@ -44,7 +47,7 @@ int main( )
   oldtree->SetBranchAddress("lep4Id", &lep4Id);
 
   //Create a new file + a clone of old tree in new file
-  TFile *newfile = new TFile("WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_skimmed.root","recreate");
+  TFile *newfile = new TFile(sampleName+"_leptonBaseline_plus_differentFlavor.root","recreate");
   TTree *newtree = oldtree->CloneTree(0);
   
   for (Long64_t i=0;i<nentries; i++) {
@@ -94,7 +97,14 @@ int main( )
      double subleadLeptonPt = leptonPtVector.at(1);
 
      if ( !(leadLeptonPt > 25. && subleadLeptonPt > 15.) ) continue;
-     if ( lep3Id == lep4Id ) continue;
+     //******************************
+     //Categories
+     //******************************
+     //Difference Flavor
+     if ( abs(lep3Id) == abs(lep4Id) ) continue;
+     
+     //Same Flavor
+     //if ( abs(lep3Id) != abs(lep4Id) ) continue;
      
      newtree->Fill();
   }
