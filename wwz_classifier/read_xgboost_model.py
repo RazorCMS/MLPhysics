@@ -31,8 +31,8 @@ signalNevents = signalFileEff.Get('NEvents')
 signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
-#bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline.root'
-bkgFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root'
+bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline.root'
+#bkgFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -72,7 +72,7 @@ PofB = 1. - PofS
 
 print '[INFO]: p(S) =', PofS, '; P(B) =', PofB
 
-test_name = 'MET_only_and_onlyOneTreeWithOneLeaf'
+test_name = 'ReadingXgBoostModel'
 
 ##Define variables to be used
 variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
@@ -86,7 +86,7 @@ df_bkg = rp.read_root(bkgFileEffName, 'WWZAnalysis', columns=variables)
 weights_signal = rp.read_root(signalFileEffName,'WWZAnalysis', columns=['weight'])
 weights_bkg = rp.read_root(bkgFileEffName,'WWZAnalysis', columns=['weight'])
 
-
+print df_signal
 ## We care about the sign of the sample only, we don't care about the xsec weight
 #weights_sign_signal = np.sign(weights_signal)
 #weights_sign_bkg = np.sign(weights_bkg)
@@ -113,8 +113,8 @@ y_test = np.concatenate([np.zeros(len(df_bkg)),np.ones(len(df_signal))])
 ############################
 # get model from file
 ############################
-pkl_file = open('model.pkl', 'rb')
-model = pickle.load(pkl_file)
+with open('model.pkl', 'rb') as pkl_file:
+    model = pickle.load(pkl_file)
 
 
 # make predictions for test data
@@ -133,7 +133,7 @@ disc_signal = y_frame[y_frame['truth'] == 1]['disc'].values
 plt.figure()
 plt.hist(disc_bkg, normed=True, bins=50, alpha=0.3)
 plt.hist(disc_signal, normed=True, bins=50, alpha=0.3)
-plt.savefig('mydiscriminator.png')
+plt.savefig('mydiscriminator_' + test_name + '.png')
 print "disc_bkg: ", disc_bkg
 print "disc_signal: ", disc_signal
 #print y_pred
@@ -226,8 +226,8 @@ plt.savefig('myTree_' + test_name + '.png')
 print "MAXIMUM SIGNIFICANCE = ", max(significance)
 
 
-output = open('model.pkl', 'wb')
+#output = open('model.pkl', 'wb')
 
 # Pickle dictionary using protocol 0.
-pickle.dump(model, output)
-output.close()
+#pickle.dump(model, output)
+#output.close()
