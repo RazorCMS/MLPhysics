@@ -13,7 +13,7 @@
 int main( )
 {
   gROOT->Reset();
-  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted";
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8";
   TFile *oldfile = new TFile(sampleName+".root");
 
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
