@@ -15,13 +15,14 @@ import ROOT as root
 #################
 ##Preliminaries
 #################
+test_name = 'JetPT_CISV'
 lumi = 100.#1/fb
 pb2fb = 1000.
 
 #####getting selection efficiency###########
 
 #signal
-signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline.root'
+signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
 signalFileEff = root.TFile(signalFileEffName)
 signalTreeEff = signalFileEff.Get('WWZAnalysis')
 signalTreeEff.Draw('MET>>tmp1', 'weight*(1)')
@@ -30,7 +31,7 @@ signalNevents = signalFileEff.Get('NEvents')
 signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
-bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline.root'
+bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/ttZJets_13TeV_madgraphMLM_leptonBaseline_plus_differentFlavor.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -50,7 +51,7 @@ root.gROOT.Reset()
 #####getting unconditional probabilities###########
 
 #signal
-signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline.root'
+signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
 signalFile = root.TFile(signalFileName)
 signalTree = signalFile.Get('WWZAnalysis')
 signalTree.Draw('MET>>tmp3', 'weight*(1)')
@@ -58,7 +59,7 @@ signalHisto = root.gDirectory.Get('tmp3')
 signalEvents = pb2fb*lumi*signalHisto.Integral()
 
 #bkg
-bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_1pb_weighted_leptonBaseline.root'
+bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/ttZJets_13TeV_madgraphMLM_leptonBaseline_plus_differentFlavor.root'
 bkgFile = root.TFile(bkgFileName)
 bkgTree = bkgFile.Get('WWZAnalysis')
 bkgTree.Draw('MET>>tmp4', 'weight*(1)')
@@ -70,28 +71,23 @@ PofB = 1. - PofS
 
 print '[INFO]: p(S) =', PofS, '; P(B) =', PofB
 
-test_name = 'MET_only_and_onlyOneTreeWithOneLeaf'
+
 
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id']
-variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
+variables = ['NJet20','NJet30','NBJet20','NBJet30','minDRJetToLep3','minDRJetToLep4', 'jet1Pt', 'jet2Pt', 'jet3Pt', 'jet4Pt', 'jet1CISV', 'jet2CISV', 'jet3CISV', 'jet4CISV']
+#variables = ['NJet20','NJet30','NBJet20','NBJet30','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET']
 
 ##Getting ROOT files into pandas
-#df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
-#df_bkg = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
-df_signal = rp.read_root(signalFileEffName,
-                             'WWZAnalysis', columns=variables)
-df_bkg = rp.read_root(bkgFileEffName,
-                          'WWZAnalysis', columns=variables)
+df_signal = rp.read_root(signalFileEffName, 'WWZAnalysis', columns=variables)
+df_bkg = rp.read_root(bkgFileEffName, 'WWZAnalysis', columns=variables)
 
 
 ##Getting Sample weights
-weights_signal = rp.read_root(signalFileEffName,
-                                  'WWZAnalysis', columns=['weight'])
-weights_bkg = rp.read_root(bkgFileEffName,
-                          'WWZAnalysis', columns=['weight'])
+weights_signal = rp.read_root(signalFileEffName, 'WWZAnalysis', columns=['weight'])
+weights_bkg = rp.read_root(bkgFileEffName, 'WWZAnalysis', columns=['weight'])
 
 
 ## We care about the sign of the sample only, we don't care about the xsec weight
@@ -110,8 +106,7 @@ sample_weights = np.concatenate([weights_sign_bkg.values, weights_sign_signal.va
 #getting a numpy array from two pandas data frames
 x = np.concatenate([df_bkg.values,df_signal.values])
 #creating numpy array for target variables
-y = np.concatenate([np.zeros(len(df_bkg)),
-                        np.ones(len(df_signal))])
+y = np.concatenate([np.zeros(len(df_bkg)), np.ones(len(df_signal))])
 
 # split data into train and test sets
 seed = 7
@@ -119,10 +114,10 @@ test_size = 0.4
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-#model = XGBClassifier(max_depth=1, n_estimators=1, gamma=1, silent=True)
+model = XGBClassifier(max_depth=5, n_estimators=300, gamma=1, silent=True)
 #model = XGBClassifier(max_depth=2, gamma=1, silent=True)
 #model = XGBClassifier(max_depth=1,n_estimators=1)
-model = XGBClassifier()
+#model = XGBClassifier()
 #model.fit(x_train, y_train, sample_weight=sample_weights)
 model.fit(x_train, y_train)
 
@@ -240,7 +235,7 @@ plt.savefig('myTree_' + test_name + '.png')
 print "MAXIMUM SIGNIFICANCE = ", max(significance)
 
 
-output = open('model.pkl', 'wb')
+output = open('model_wwz_vs_ttz.pkl', 'wb')
 
 # Pickle dictionary using protocol 0.
 pickle.dump(model, output)

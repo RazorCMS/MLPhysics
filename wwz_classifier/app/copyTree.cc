@@ -13,8 +13,9 @@
 int main( )
 {
   gROOT->Reset();
-  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8";
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8";
   TFile *oldfile = new TFile(sampleName+".root");
+
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
   TH1F* nevents = (TH1F*)oldfile->Get("NEvents");
   Long64_t nentries = oldtree->GetEntries();
@@ -48,7 +49,8 @@ int main( )
   //Create a new file + a clone of old tree in new file
   TFile *newfile = new TFile(sampleName+"_leptonBaseline_plus_differentFlavor.root","recreate");
   TTree *newtree = oldtree->CloneTree(0);
-  
+  float lep34Mass;
+  TBranch *bpt = newtree->Branch("lep34Mass",&lep34Mass,"lep34Mass/F");
   for (Long64_t i=0;i<nentries; i++) {
     oldtree->GetEntry(i);
     if ( !( lep1Pt > 10. && lep2Pt> 10. && lep3Pt > 10. && lep4Pt> 10. ) ) continue;
@@ -104,6 +106,8 @@ int main( )
      
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
+
+     lep34Mass = vLep34.M();
      
      newtree->Fill();
   }

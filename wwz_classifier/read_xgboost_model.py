@@ -22,6 +22,7 @@ pb2fb = 1000.
 
 #signal
 signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline.root'
+#signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root'
 signalFileEff = root.TFile(signalFileEffName)
 signalTreeEff = signalFileEff.Get('WWZAnalysis')
 signalTreeEff.Draw('MET>>tmp1', 'weight*(1)')
@@ -31,6 +32,7 @@ signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
 bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline.root'
+#bkgFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -70,30 +72,21 @@ PofB = 1. - PofS
 
 print '[INFO]: p(S) =', PofS, '; P(B) =', PofB
 
-test_name = 'MET_only_and_onlyOneTreeWithOneLeaf'
+test_name = 'ReadingXgBoostModel'
 
 ##Define variables to be used
-#variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
-#variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id']
 variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
-#variables = ['MET']
+
 
 ##Getting ROOT files into pandas
-#df_signal = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
-#df_bkg = rp.read_root('/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZAnalysis_ZZTo4L_13TeV-amcatnloFXFX-pythia8.root', 'WWZAnalysis', columns=['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt'])
-df_signal = rp.read_root(signalFileEffName,
-                             'WWZAnalysis', columns=variables)
-df_bkg = rp.read_root(bkgFileEffName,
-                          'WWZAnalysis', columns=variables)
-
+df_signal = rp.read_root(signalFileEffName, 'WWZAnalysis', columns=variables)
+df_bkg = rp.read_root(bkgFileEffName, 'WWZAnalysis', columns=variables)
 
 ##Getting Sample weights
-weights_signal = rp.read_root(signalFileEffName,
-                                  'WWZAnalysis', columns=['weight'])
-weights_bkg = rp.read_root(bkgFileEffName,
-                          'WWZAnalysis', columns=['weight'])
+weights_signal = rp.read_root(signalFileEffName,'WWZAnalysis', columns=['weight'])
+weights_bkg = rp.read_root(bkgFileEffName,'WWZAnalysis', columns=['weight'])
 
-
+print df_signal
 ## We care about the sign of the sample only, we don't care about the xsec weight
 #weights_sign_signal = np.sign(weights_signal)
 #weights_sign_bkg = np.sign(weights_bkg)
@@ -108,27 +101,20 @@ sample_weights = np.concatenate([weights_sign_bkg.values, weights_sign_signal.va
 #print sample_weights
 
 #getting a numpy array from two pandas data frames
-x = np.concatenate([df_bkg.values,df_signal.values])
+x_test = np.concatenate([df_bkg.values,df_signal.values])
 #creating numpy array for target variables
-y = np.concatenate([np.zeros(len(df_bkg)),
-                        np.ones(len(df_signal))])
+y_test = np.concatenate([np.zeros(len(df_bkg)),np.ones(len(df_signal))])
 
 # split data into train and test sets
-seed = 7
-test_size = 0.4
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
+#seed = 7
+#test_size = 0.4
+#x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
-# fit model no training data
-#model = XGBClassifier(max_depth=1, n_estimators=1, gamma=1, silent=True)
-#model = XGBClassifier(max_depth=2, gamma=1, silent=True)
-#model = XGBClassifier(max_depth=1,n_estimators=1)
-model = XGBClassifier()
-#model.fit(x_train, y_train, sample_weight=sample_weights)
-model.fit(x_train, y_train)
-
-#print( dir(model) )
-#print model
-
+############################
+# get model from file
+############################
+with open('model.pkl', 'rb') as pkl_file:
+    model = pickle.load(pkl_file)
 
 
 # make predictions for test data
@@ -147,7 +133,7 @@ disc_signal = y_frame[y_frame['truth'] == 1]['disc'].values
 plt.figure()
 plt.hist(disc_bkg, normed=True, bins=50, alpha=0.3)
 plt.hist(disc_signal, normed=True, bins=50, alpha=0.3)
-plt.savefig('mydiscriminator.png')
+plt.savefig('mydiscriminator_' + test_name + '.png')
 print "disc_bkg: ", disc_bkg
 print "disc_signal: ", disc_signal
 #print y_pred
@@ -240,8 +226,8 @@ plt.savefig('myTree_' + test_name + '.png')
 print "MAXIMUM SIGNIFICANCE = ", max(significance)
 
 
-output = open('model.pkl', 'wb')
+#output = open('model.pkl', 'wb')
 
 # Pickle dictionary using protocol 0.
-pickle.dump(model, output)
-output.close()
+#pickle.dump(model, output)
+#output.close()
