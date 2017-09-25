@@ -86,7 +86,7 @@ void WWZAnalysis::Loop()
      //if ( fabs(vLep34.M() - 91) < 15 ) continue;
      
      //MET 
-     if (!(MET > 46.7)) continue;
+     //if (!(MET > 46.7)) continue;
      
      //BJet Veto
      //if (!(NBJet20 == 0)) continue;
@@ -99,10 +99,12 @@ void WWZAnalysis::Loop()
      //Categories
      //******************************
      //Difference Flavor
-     //if ( abs(lep3Id) == abs(lep4Id) ) continue;
+     if ( abs(lep3Id) == abs(lep4Id) ) continue;
      
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
+     if ( disc < 0.991 ) continue;
+     h_disc_ZZ->Fill(disc_ZZ, weight*1000.0*250.);//100/fb events
      
      npassed += weight;
      

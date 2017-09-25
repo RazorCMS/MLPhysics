@@ -11,7 +11,7 @@
 #include <TROOT.h>
 #include <TChain.h>
 #include <TFile.h>
-
+#include <TH1F.h>
 // Header file for the classes stored in the TTree if any.
 
 class WWZAnalysis {
@@ -19,6 +19,10 @@ public :
    TTree          *fChain;   //!pointer to the analyzed TTree or TChain
    Int_t           fCurrent; //!current Tree number in a TChain
 
+
+  //Histograms
+
+  TH1F* h_disc_ZZ;
 // Fixed size dimensions of array or collections stored in the TTree if any.
 
    // Declaration of leaf types
@@ -71,7 +75,9 @@ public :
    Float_t         minDRJetToLep3;
    Float_t         minDRJetToLep4;
    Bool_t          HLTDecision[300];
-
+   Float_t         disc;
+   Float_t         disc_ZZ;
+  
    // List of branches
    TBranch        *b_weight;   //!
    TBranch        *b_pileupWeight;   //!
@@ -122,6 +128,8 @@ public :
    TBranch        *b_minDRJetToLep3;   //!
    TBranch        *b_minDRJetToLep4;   //!
    TBranch        *b_HLTDecision;   //!
+   TBranch        *b_disc;   //!
+   TBranch        *b_disc_ZZ;   //!
 
    WWZAnalysis(TTree *tree=0);
    virtual ~WWZAnalysis();
@@ -242,6 +250,8 @@ void WWZAnalysis::Init(TTree *tree)
    fChain->SetBranchAddress("minDRJetToLep3", &minDRJetToLep3, &b_minDRJetToLep3);
    fChain->SetBranchAddress("minDRJetToLep4", &minDRJetToLep4, &b_minDRJetToLep4);
    fChain->SetBranchAddress("HLTDecision", HLTDecision, &b_HLTDecision);
+   fChain->SetBranchAddress("disc", &disc, &b_disc);
+   fChain->SetBranchAddress("disc_ZZ", &disc_ZZ, &b_disc_ZZ);
    Notify();
 }
 
