@@ -13,7 +13,10 @@
 int main( )
 {
   gROOT->Reset();
-  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8";
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
   TFile *oldfile = new TFile(sampleName+".root");
 
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
@@ -23,6 +26,7 @@ int main( )
   float lep1Pt, lep2Pt, lep3Pt, lep4Pt;
   float lep1Phi, lep2Phi, lep3Phi, lep4Phi;
   float lep1Eta, lep2Eta, lep3Eta, lep4Eta;
+  float disc;
   int lep1Id, lep2Id, lep3Id, lep4Id;
   
   oldtree->SetBranchAddress("lep1Pt", &lep1Pt);
@@ -46,6 +50,8 @@ int main( )
   oldtree->SetBranchAddress("lep3Id", &lep3Id);
   oldtree->SetBranchAddress("lep4Id", &lep4Id);
 
+  //oldtree->SetBranchAddress("disc", &disc);
+  
   //Create a new file + a clone of old tree in new file
   TFile *newfile = new TFile(sampleName+"_leptonBaseline_plus_differentFlavor.root","recreate");
   TTree *newtree = oldtree->CloneTree(0);
@@ -103,7 +109,7 @@ int main( )
      //******************************
      //Difference Flavor
      if ( abs(lep3Id) == abs(lep4Id) ) continue;
-     
+     //if ( disc < 0.991 ) continue;
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
 

@@ -15,14 +15,14 @@ import ROOT as root
 #################
 ##Preliminaries
 #################
-test_name = 'JetPT_CISV'
+test_name = 'JetPT_CISV_depth5_500trees'
 lumi = 100.#1/fb
 pb2fb = 1000.
 
 #####getting selection efficiency###########
 
 #signal
-signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
+signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
 signalFileEff = root.TFile(signalFileEffName)
 signalTreeEff = signalFileEff.Get('WWZAnalysis')
 signalTreeEff.Draw('MET>>tmp1', 'weight*(1)')
@@ -31,7 +31,7 @@ signalNevents = signalFileEff.Get('NEvents')
 signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
-bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/ttZJets_13TeV_madgraphMLM_leptonBaseline_plus_differentFlavor.root'
+bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM_leptonBaseline_plus_differentFlavor.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -39,8 +39,10 @@ bkgHistoEff = root.gDirectory.Get('tmp2')
 bkgNevents = bkgFileEff.Get('NEvents')
 bkgEff = bkgHistoEff.Integral()/bkgNevents.Integral()
 
+#WWZ cross section
 signalXsec = 0.1651*0.003179651616*pb2fb
-bkgXsec    = 1.212*pb2fb
+##ttZ cross section
+bkgXsec    = 0.659*pb2fb
 
 Sqrt_EffTimesXsec = math.sqrt(bkgXsec*bkgEff + signalXsec*signalEff)
 
@@ -51,7 +53,7 @@ root.gROOT.Reset()
 #####getting unconditional probabilities###########
 
 #signal
-signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
+signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
 signalFile = root.TFile(signalFileName)
 signalTree = signalFile.Get('WWZAnalysis')
 signalTree.Draw('MET>>tmp3', 'weight*(1)')
@@ -59,7 +61,7 @@ signalHisto = root.gDirectory.Get('tmp3')
 signalEvents = pb2fb*lumi*signalHisto.Integral()
 
 #bkg
-bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/ttZJets_13TeV_madgraphMLM_leptonBaseline_plus_differentFlavor.root'
+bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
 bkgFile = root.TFile(bkgFileName)
 bkgTree = bkgFile.Get('WWZAnalysis')
 bkgTree.Draw('MET>>tmp4', 'weight*(1)')
@@ -76,7 +78,7 @@ print '[INFO]: p(S) =', PofS, '; P(B) =', PofB
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id']
-variables = ['NJet20','NJet30','NBJet20','NBJet30','minDRJetToLep3','minDRJetToLep4', 'jet1Pt', 'jet2Pt', 'jet3Pt', 'jet4Pt', 'jet1CISV', 'jet2CISV', 'jet3CISV', 'jet4CISV']
+variables = ['NJet20','NBJet20','minDRJetToLep3','minDRJetToLep4', 'jet1Pt', 'jet2Pt', 'jet3Pt', 'jet4Pt', 'jet1CISV', 'jet2CISV', 'jet3CISV', 'jet4CISV']
 #variables = ['NJet20','NJet30','NBJet20','NBJet30','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET']
 
@@ -114,10 +116,10 @@ test_size = 0.4
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-model = XGBClassifier(max_depth=5, n_estimators=300, gamma=1, silent=True)
+#model = XGBClassifier(max_depth=3, n_estimators=500, gamma=1, reg_alpha=8, silent=True, learning_rate = .99)
 #model = XGBClassifier(max_depth=2, gamma=1, silent=True)
 #model = XGBClassifier(max_depth=1,n_estimators=1)
-#model = XGBClassifier()
+model = XGBClassifier()
 #model.fit(x_train, y_train, sample_weight=sample_weights)
 model.fit(x_train, y_train)
 
@@ -142,7 +144,7 @@ disc_signal = y_frame[y_frame['truth'] == 1]['disc'].values
 plt.figure()
 plt.hist(disc_bkg, normed=True, bins=50, alpha=0.3)
 plt.hist(disc_signal, normed=True, bins=50, alpha=0.3)
-plt.savefig('mydiscriminator.png')
+plt.savefig('mydiscriminator' + test_name + '.png')
 print "disc_bkg: ", disc_bkg
 print "disc_signal: ", disc_signal
 #print y_pred

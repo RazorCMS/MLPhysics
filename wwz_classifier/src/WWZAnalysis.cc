@@ -86,10 +86,11 @@ void WWZAnalysis::Loop()
      //if ( fabs(vLep34.M() - 91) < 15 ) continue;
      
      //MET 
-     if (!(MET > 46.7)) continue;
+     //if (!(MET > 50.0)) continue;
      
      //BJet Veto
      //if (!(NBJet20 == 0)) continue;
+     if( disc < 0.991 ) continue;
      
      //Jet Veto
      //if (!(NJet30 == 0)) continue;
@@ -99,7 +100,7 @@ void WWZAnalysis::Loop()
      //Categories
      //******************************
      //Difference Flavor
-     //if ( abs(lep3Id) == abs(lep4Id) ) continue;
+     if ( abs(lep3Id) == abs(lep4Id) ) continue;
      
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
@@ -108,7 +109,7 @@ void WWZAnalysis::Loop()
      
    }
 
-   std::cout << "nevents: " << npassed*1000.0*100. << std::endl;
-   std::cout << "nevents total: " << ntotal*1000.0*100. << std::endl;
+   std::cout << "nevents: " << npassed*1000.0*39.5 << std::endl;
+   std::cout << "nevents total: " << ntotal*1000.0*39.5 << std::endl;
    std::cout << "eff:" <<  npassed/ntotal << std::endl;
 }
