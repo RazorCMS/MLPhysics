@@ -10,14 +10,17 @@ CPPFLAGS += -g -std=c++14
 
 TARGET = wwz_ana
 TARGET1 = copyTree
+TARGET2 = CreateDataCard
 
 SRC = app/main_WWZAnalysis.cc src/WWZAnalysis.cc
 SRC1 = app/copyTree.cc
+SRC2 = app/CreateDataCard.cc src/WWZAnalysis.cc
 
 OBJ = $(SRC:.cc=.o)
-OBJ1 =$(SRC1:.cc=.o) 
+OBJ1 =$(SRC1:.cc=.o)
+OBJ2 =$(SRC2:.cc=.o)
 
-all : $(TARGET) $(TARGET1)
+all : $(TARGET) $(TARGET1) $(TARGET2)
 
 $(TARGET) : $(OBJ)
 	@echo $@
@@ -27,8 +30,12 @@ $(TARGET1) : $(OBJ1)
 	@echo $@
 	$(LD) $(CPPFLAGS) -o $(TARGET1) $(OBJ1) $(LDFLAGS)
 
+$(TARGET2) : $(OBJ2)
+	@echo $@
+	$(LD) $(CPPFLAGS) -o $(TARGET2) $(OBJ2) $(LDFLAGS)
+
 %.o : %.cc
 	@echo $@
 	$(CXX) $(CPPFLAGS) -o $@ -c $<
 clean :
-	rm -f *.o src/*.o $(Aux)/src/*.o $(TARGET) $(TARGET1) *~
+	rm -f *.o src/*.o $(Aux)/src/*.o $(TARGET) $(TARGET1) $(TARGET2) *~
