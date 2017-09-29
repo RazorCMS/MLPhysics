@@ -33,7 +33,7 @@ test_name = 'ReadingXgBoostModel'
 
 ##Define variables to be used
 ##WWZ vs ZZ
-variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
+variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH', 'lep34Mass']
 ##WWZ vs ttZ
 #variables = ['NJet20','NBJet20','minDRJetToLep3','minDRJetToLep4', 'jet1Pt', 'jet2Pt', 'jet3Pt', 'jet4Pt', 'jet1CISV', 'jet2CISV', 'jet3CISV', 'jet4CISV']
 
@@ -50,7 +50,8 @@ y_test = np.zeros(len(df))
 ############################
 # get model from file
 ############################
-with open('models/model_differentFlavor_and_ttZ_disc_cut.pkl', 'rb') as pkl_file:
+#with open('models/model_differentFlavor_and_ttZ_disc_cut.pkl', 'rb') as pkl_file:
+with open('model.pkl','rb') as pkl_file:
 #with open('models/model_wwz_vs_ttz.pkl','rb') as pkl_file:
     model = pickle.load(pkl_file)
 
