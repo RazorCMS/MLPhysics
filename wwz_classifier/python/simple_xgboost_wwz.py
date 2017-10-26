@@ -21,7 +21,7 @@ pb2fb = 1000.
 #####getting selection efficiency###########
 
 #signal
-signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator_ttZ_disc_cut.root'
+signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
 signalFileEff = root.TFile(signalFileEffName)
 signalTreeEff = signalFileEff.Get('WWZAnalysis')
 signalTreeEff.Draw('MET>>tmp1', 'weight*(1)')
@@ -30,7 +30,7 @@ signalNevents = signalFileEff.Get('NEvents')
 signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
-bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator_ttZ_disc_cut.root'
+bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_leptonBaseline_plus_differentFlavor.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -50,7 +50,7 @@ root.gROOT.Reset()
 #####getting unconditional probabilities###########
 
 #signal
-signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator_ttZ_disc_cut.root'
+signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
 signalFile = root.TFile(signalFileName)
 signalTree = signalFile.Get('WWZAnalysis')
 signalTree.Draw('MET>>tmp3', 'weight*(1)')
@@ -58,7 +58,7 @@ signalHisto = root.gDirectory.Get('tmp3')
 signalEvents = pb2fb*lumi*signalHisto.Integral()
 
 #bkg
-bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator_ttZ_disc_cut.root'
+bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
 bkgFile = root.TFile(bkgFileName)
 bkgTree = bkgFile.Get('WWZAnalysis')
 bkgTree.Draw('MET>>tmp4', 'weight*(1)')
@@ -75,7 +75,8 @@ test_name = 'MET_only_and_onlyOneTreeWithOneLeaf'
 ##Define variables to be used
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id']
-variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','lep34Mass']
+#variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','lep34Mass']
+variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
 #variables = ['MET']
 
 ##Getting ROOT files into pandas

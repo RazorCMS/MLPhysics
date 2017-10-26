@@ -37,6 +37,7 @@ int main()
 
   //For Bkg WZ
   fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  //fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_mllmin01_13TeV-powheg-pythia8_ext1_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
   TTree* tree_WZ = (TTree*)fin->Get("WWZAnalysis");
 
   WWZAnalysis* wwz_WZ = new WWZAnalysis( tree_WZ );
@@ -48,12 +49,12 @@ int main()
   h_data->Add(wwz_ZZ->h_disc_ZZ);
   h_data->Add(wwz_ttZ->h_disc_ZZ);
   h_data->Add(wwz_signal->h_disc_ZZ);
-  //h_data->Add(wwz_WZ->h_disc_ZZ);
+  h_data->Add(wwz_WZ->h_disc_ZZ);
 
   std::ofstream ofs ("datacards.txt", std::ofstream::out);
   ofs << "imax 1\n";
-  //ofs << "jmax 3\n";
-  ofs << "jmax 2\n";
+  ofs << "jmax 3\n";
+  //ofs << "jmax 2\n";
   ofs << "kmax *\n";
   ofs << "---------------\n";
   ofs << "shapes * * dataCardShapes.root $PROCESS $PROCESS_$SYSTEMATIC\n";
@@ -61,16 +62,18 @@ int main()
   ofs << "bin bin1\n";
   ofs << "observation " << h_data->Integral() << std::endl;
   ofs << "------------------------------\n";
-  //ofs << "bin             bin1           bin1           bin1            bin1\n";
-  //ofs << "process         WWZ_signal     WWZ_bkg_ZZ     WWZ_bkg_ttZ     WWZ_bkg_WZ\n";
-  //ofs << "process         0              1              2               3\n";
-  //ofs << "rate\t\t" <<  wwz_signal->h_disc_ZZ->Integral() << "\t\t" << wwz_ZZ->h_disc_ZZ->Integral() << "\t\t" << wwz_ttZ->h_disc_ZZ->Integral() << "\t\t" << wwz_WZ->h_disc_ZZ->Integral() <<"\n";
 
+  ofs << "bin             bin1           bin1           bin1            bin1\n";
+  ofs << "process         WWZ_signal     WWZ_bkg_ZZ     WWZ_bkg_ttZ     WWZ_bkg_WZ\n";
+  ofs << "process         0              1              2               3\n";
+  ofs << "rate\t\t" <<  wwz_signal->h_disc_ZZ->Integral() << "\t\t" << wwz_ZZ->h_disc_ZZ->Integral() << "\t\t" << wwz_ttZ->h_disc_ZZ->Integral() << "\t\t" << wwz_WZ->h_disc_ZZ->Integral() <<"\n";
+  
+  /*
   ofs << "bin             bin1           bin1           bin1\n";
   ofs << "process         WWZ_signal     WWZ_bkg_ZZ     WWZ_bkg_ttZ\n";
   ofs << "process         0              1              2\n";
   ofs << "rate\t\t" <<  wwz_signal->h_disc_ZZ->Integral() << "\t\t" << wwz_ZZ->h_disc_ZZ->Integral() << "\t\t" << wwz_ttZ->h_disc_ZZ->Integral() << "\n";
-  
+  */
   ofs << "--------------------------------\n";
   //ofs << "lumi     lnN    1.10 \t\t 1.10 \t\t 1.10 \t\t 1.10\n";
   //ofs << "bgnorm   lnN    1.00 \t\t 1.30 \t\t 1.25 \t\t 1.30\n";

@@ -15,7 +15,7 @@ import ROOT as root
 #################
 ##Preliminaries
 #################
-test_name = 'JetPT_CISV_depth5_500trees'
+test_name = 'WWZ_vs_ttZ'
 lumi = 100.#1/fb
 pb2fb = 1000.
 

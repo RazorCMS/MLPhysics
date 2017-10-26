@@ -13,10 +13,12 @@
 int main( )
 {
   gROOT->Reset();
-  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8_leptonBaseline_plus_differentFlavor_ttZ_xgBoost_discriminator";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_mllmin01_13TeV-powheg-pythia8_ext1_ALL";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted";
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted";
+  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM";
   TFile *oldfile = new TFile(sampleName+".root");
 
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
@@ -53,7 +55,7 @@ int main( )
   //oldtree->SetBranchAddress("disc", &disc);
   
   //Create a new file + a clone of old tree in new file
-  TFile *newfile = new TFile(sampleName+"_leptonBaseline_plus_differentFlavor.root","recreate");
+  TFile *newfile = new TFile(sampleName+"_lep34Mass.root","recreate");
   TTree *newtree = oldtree->CloneTree(0);
   float lep34Mass;
   TBranch *bpt = newtree->Branch("lep34Mass",&lep34Mass,"lep34Mass/F");
@@ -61,61 +63,61 @@ int main( )
     oldtree->GetEntry(i);
     if ( !( lep1Pt > 10. && lep2Pt> 10. && lep3Pt > 10. && lep4Pt> 10. ) ) continue;
     
-     //******************************
-     //Lorentz Vectors
-     //******************************
-     TLorentzVector vLep1;
-     double lep1Mass = 0;
-     if (abs(lep1Id) == 11) lep1Mass = 0.000511;
-     else if (abs(lep1Id) == 13) lep1Mass = 0.1057;
-     vLep1.SetPtEtaPhiM(lep1Pt, lep1Eta, lep1Phi,lep1Mass);
-     
-     TLorentzVector vLep2;
-     double lep2Mass = 0;
-     if (abs(lep2Id) == 11) lep2Mass = 0.000511;
-     else if (abs(lep2Id) == 13) lep2Mass = 0.1057;
-     vLep2.SetPtEtaPhiM(lep2Pt, lep2Eta, lep2Phi,lep2Mass);
-     
-     TLorentzVector vLep3;
-     double lep3Mass = 0;
-     if (abs(lep3Id) == 11) lep3Mass = 0.000511;
-     else if (abs(lep3Id) == 13) lep3Mass = 0.1057;
-     vLep3.SetPtEtaPhiM(lep3Pt, lep3Eta, lep3Phi,lep3Mass);
-     
-     TLorentzVector vLep4;
-     double lep4Mass = 0;
-     if (abs(lep4Id) == 11) lep4Mass = 0.000511;
-     else if (abs(lep4Id) == 13) lep4Mass = 0.1057;
-     vLep4.SetPtEtaPhiM(lep4Pt, lep4Eta, lep4Phi,lep4Mass);
-     
-     TLorentzVector ZCandidate = vLep1+vLep2;
-     TLorentzVector v4L = vLep1+vLep2+vLep3+vLep4;
-     TLorentzVector vLep34 = vLep3+vLep4;
-
-     auto ptOrder = [](auto a, auto b) { return a > b; };
-     //leading lepton pt selection
-     std::vector<double> leptonPtVector; 
-     leptonPtVector.push_back(lep1Pt);
-     leptonPtVector.push_back(lep2Pt);
-     leptonPtVector.push_back(lep3Pt);
-     leptonPtVector.push_back(lep4Pt);
-     sort(leptonPtVector.begin(), leptonPtVector.end(), ptOrder);
-     double leadLeptonPt    = leptonPtVector.at(0);
-     double subleadLeptonPt = leptonPtVector.at(1);
-
-     if ( !(leadLeptonPt > 25. && subleadLeptonPt > 15.) ) continue;
-     //******************************
-     //Categories
-     //******************************
-     //Difference Flavor
-     if ( abs(lep3Id) == abs(lep4Id) ) continue;
-     //if ( disc < 0.991 ) continue;
-     //Same Flavor
-     //if ( abs(lep3Id) != abs(lep4Id) ) continue;
-
-     lep34Mass = vLep34.M();
-     
-     newtree->Fill();
+    //******************************
+    //Lorentz Vectors
+    //******************************
+    TLorentzVector vLep1;
+    double lep1Mass = 0;
+    if (abs(lep1Id) == 11) lep1Mass = 0.000511;
+    else if (abs(lep1Id) == 13) lep1Mass = 0.1057;
+    vLep1.SetPtEtaPhiM(lep1Pt, lep1Eta, lep1Phi,lep1Mass);
+    
+    TLorentzVector vLep2;
+    double lep2Mass = 0;
+    if (abs(lep2Id) == 11) lep2Mass = 0.000511;
+    else if (abs(lep2Id) == 13) lep2Mass = 0.1057;
+    vLep2.SetPtEtaPhiM(lep2Pt, lep2Eta, lep2Phi,lep2Mass);
+    
+    TLorentzVector vLep3;
+    double lep3Mass = 0;
+    if (abs(lep3Id) == 11) lep3Mass = 0.000511;
+    else if (abs(lep3Id) == 13) lep3Mass = 0.1057;
+    vLep3.SetPtEtaPhiM(lep3Pt, lep3Eta, lep3Phi,lep3Mass);
+    
+    TLorentzVector vLep4;
+    double lep4Mass = 0;
+    if (abs(lep4Id) == 11) lep4Mass = 0.000511;
+    else if (abs(lep4Id) == 13) lep4Mass = 0.1057;
+    vLep4.SetPtEtaPhiM(lep4Pt, lep4Eta, lep4Phi,lep4Mass);
+    
+    TLorentzVector ZCandidate = vLep1+vLep2;
+    TLorentzVector v4L = vLep1+vLep2+vLep3+vLep4;
+    TLorentzVector vLep34 = vLep3+vLep4;
+    
+    auto ptOrder = [](auto a, auto b) { return a > b; };
+    //leading lepton pt selection
+    std::vector<double> leptonPtVector; 
+    leptonPtVector.push_back(lep1Pt);
+    leptonPtVector.push_back(lep2Pt);
+    leptonPtVector.push_back(lep3Pt);
+    leptonPtVector.push_back(lep4Pt);
+    sort(leptonPtVector.begin(), leptonPtVector.end(), ptOrder);
+    double leadLeptonPt    = leptonPtVector.at(0);
+    double subleadLeptonPt = leptonPtVector.at(1);
+    
+    if ( !(leadLeptonPt > 25. && subleadLeptonPt > 15.) ) continue;
+    //******************************
+    //Categories
+    //******************************
+    //Different Flavor
+    //if ( abs(lep3Id) == abs(lep4Id) ) continue;
+    //if ( disc < 0.991 ) continue;
+    //Same Flavor
+    //if ( abs(lep3Id) != abs(lep4Id) ) continue;
+    
+    lep34Mass = vLep34.M();
+    
+    newtree->Fill();
   }
   newtree->Print();
   newtree->AutoSave();
