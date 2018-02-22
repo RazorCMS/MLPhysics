@@ -20,8 +20,9 @@ pb2fb = 1000.
 
 #####getting selection efficiency###########
 
+folder = '/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/'
 #signal
-signalFileEffName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_leptonBaseline_plus_differentFlavor.root'
+signalFileEffName = folder + 'WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_lep34Mass.root'
 signalFileEff = root.TFile(signalFileEffName)
 signalTreeEff = signalFileEff.Get('WWZAnalysis')
 signalTreeEff.Draw('MET>>tmp1', 'weight*(1)')
@@ -30,7 +31,7 @@ signalNevents = signalFileEff.Get('NEvents')
 signalEff = signalHistoEff.Integral()/signalNevents.Integral()
 
 #bkg
-bkgFileEffName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_leptonBaseline_plus_differentFlavor.root'
+bkgFileEffName    = folder + 'ZZ_WZ_cocktail.root'
 bkgFileEff = root.TFile(bkgFileEffName)
 bkgTreeEff = bkgFileEff.Get('WWZAnalysis')
 bkgTreeEff.Draw('MET>>tmp2', 'weight*(1)')
@@ -50,7 +51,7 @@ root.gROOT.Reset()
 #####getting unconditional probabilities###########
 
 #signal
-signalFileName = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
+signalFileName =  folder + 'WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_lep34Mass.root'
 signalFile = root.TFile(signalFileName)
 signalTree = signalFile.Get('WWZAnalysis')
 signalTree.Draw('MET>>tmp3', 'weight*(1)')
@@ -58,7 +59,7 @@ signalHisto = root.gDirectory.Get('tmp3')
 signalEvents = pb2fb*lumi*signalHisto.Integral()
 
 #bkg
-bkgFileName    = '/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor.root'
+bkgFileName    = folder + 'ZZ_WZ_cocktail.root'
 bkgFile = root.TFile(bkgFileName)
 bkgTree = bkgFile.Get('WWZAnalysis')
 bkgTree.Draw('MET>>tmp4', 'weight*(1)')
@@ -76,7 +77,7 @@ test_name = 'MET_only_and_onlyOneTreeWithOneLeaf'
 #variables = ['MET','METPhi','lep1Pt','lep2Pt','lep3Pt','lep4Pt','NJet20','NJet30','NBJet20','NBJet30','lep1Phi','lep2Phi','lep3Phi','lep4Phi','lep1Eta','lep2Eta','lep3Eta','lep4Eta','ZMass','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','minDRJetToLep3','minDRJetToLep4']
 #variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id']
 #variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH','lep34Mass']
-variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH']
+variables = ['MET','lep1Pt','lep2Pt','lep3Pt','lep4Pt','ZMass','lep3Id', 'lep4Id','ZPt','lep3MT','lep4MT','lep34MT','phi0','theta0','phi','theta1','theta2','phiH', 'lep34Mass', 'lep1dZ', 'lep2dZ', 'lep3dZ', 'lep4dZ', 'pt_zeta', 'pt_zeta_vis']
 #variables = ['MET']
 
 ##Getting ROOT files into pandas
@@ -120,10 +121,10 @@ test_size = 0.4
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
 
 # fit model no training data
-#model = XGBClassifier(max_depth=1, n_estimators=1, gamma=1, silent=True)
+model = XGBClassifier(max_depth=8, n_estimators=1000, gamma=1, silent=True,  learning_rate = .99)
 #model = XGBClassifier(max_depth=2, gamma=1, silent=True)
 #model = XGBClassifier(max_depth=1,n_estimators=1)
-model = XGBClassifier()
+#model = XGBClassifier()
 #model.fit(x_train, y_train, sample_weight=sample_weights)
 model.fit(x_train, y_train)
 
@@ -241,7 +242,7 @@ plt.savefig('myTree_' + test_name + '.png')
 print "MAXIMUM SIGNIFICANCE = ", max(significance)
 
 
-output = open('model.pkl', 'wb')
+output = open('model_wwz_vs_zz_cocktail.pkl', 'wb')
 
 # Pickle dictionary using protocol 0.
 pickle.dump(model, output)

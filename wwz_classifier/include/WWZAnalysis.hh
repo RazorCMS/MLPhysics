@@ -78,6 +78,10 @@ public :
   Float_t         lep34Mass;
   Float_t         disc_ttZ;
    Float_t         disc_ZZ;
+  Bool_t lep1PassLooseMVAID;
+  Bool_t lep2PassLooseMVAID;
+  Bool_t lep3PassLooseMVAID;
+  Bool_t lep4PassLooseMVAID;
   
    // List of branches
    TBranch        *b_weight;   //!
@@ -132,7 +136,11 @@ public :
   TBranch         *b_lep34Mass;
    TBranch        *b_disc_ttZ;   //!
    TBranch        *b_disc_ZZ;   //!
-
+  TBranch         *b_lep1PassLooseMVAID;  
+  TBranch         *b_lep2PassLooseMVAID;
+  TBranch         *b_lep3PassLooseMVAID;
+  TBranch         *b_lep4PassLooseMVAID;
+  
    WWZAnalysis(TTree *tree=0);
    virtual ~WWZAnalysis();
    virtual Int_t    Cut(Long64_t entry);
@@ -255,6 +263,10 @@ void WWZAnalysis::Init(TTree *tree)
    fChain->SetBranchAddress("lep34Mass", &lep34Mass, &b_lep34Mass);
    fChain->SetBranchAddress("disc_ttZ", &disc_ttZ, &b_disc_ttZ);
    fChain->SetBranchAddress("disc_ZZ", &disc_ZZ, &b_disc_ZZ);
+   fChain->SetBranchAddress("lep1PassLooseMVAID", &lep1PassLooseMVAID, &b_lep1PassLooseMVAID);
+   fChain->SetBranchAddress("lep2PassLooseMVAID", &lep2PassLooseMVAID, &b_lep2PassLooseMVAID);
+   fChain->SetBranchAddress("lep3PassLooseMVAID", &lep3PassLooseMVAID, &b_lep3PassLooseMVAID);
+   fChain->SetBranchAddress("lep4PassLooseMVAID", &lep4PassLooseMVAID, &b_lep4PassLooseMVAID);
    Notify();
 }
 

@@ -13,12 +13,8 @@
 int main( )
 {
   gROOT->Reset();
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV-amcatnloFXFX-pythia8";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_mllmin01_13TeV-powheg-pythia8_ext1_ALL";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted";
-  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted";
-  //TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM";
+  TString sampleName = "/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted";
+
   TFile *oldfile = new TFile(sampleName+".root");
 
   TTree *oldtree = (TTree*)oldfile->Get("WWZAnalysis");
@@ -110,7 +106,7 @@ int main( )
     //Categories
     //******************************
     //Different Flavor
-    //if ( abs(lep3Id) == abs(lep4Id) ) continue;
+    if ( abs(lep3Id) == abs(lep4Id) ) continue;
     //if ( disc < 0.991 ) continue;
     //Same Flavor
     //if ( abs(lep3Id) != abs(lep4Id) ) continue;

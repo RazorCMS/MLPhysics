@@ -8,6 +8,7 @@
 #include <TCanvas.h>
 #include <TLegend.h>
 #include <TString.h>
+#include <THStack.h>
 
 int main()
 {
@@ -20,22 +21,21 @@ int main()
   c->SetFrameBorderMode(0);
   c->SetFrameBorderMode(0);
 
-  const int npoints = 300;
+  const int npoints = 50;
   
-  TFile* fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  TFile* fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_signal = (TTree*)fin->Get("WWZAnalysis");
   
   //For Bkg ZZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_ZZ = (TTree*)fin->Get("WWZAnalysis");
 
   //For Bkg ttZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_ttZ = (TTree*)fin->Get("WWZAnalysis");
 
   //For Bkg WZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
-  //fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_mllmin01_13TeV-powheg-pythia8_ext1_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_WZ = (TTree*)fin->Get("WWZAnalysis");
 
   //Singal
@@ -48,18 +48,34 @@ int main()
   tree_ZZ->Draw(Form("disc_ZZ>>tmp_ZZ(%d,0,1)", npoints), "", "goff");
   TH1F* h_ZZ = (TH1F*)gDirectory->Get("tmp_ZZ");
   h_ZZ->Scale(1.0/h_ZZ->Integral());
-  h_ZZ->SetLineColor(kRed);
+  h_ZZ->SetLineColor(kOrange+7);
   h_ZZ->SetLineWidth(2);
 
+  //ttZ
+  tree_ttZ->Draw(Form("disc_ZZ>>ttz_ZZ(%d,0,1)", npoints), "", "goff");
+  TH1F* h_ttz_zz = (TH1F*)gDirectory->Get("ttz_ZZ");
+  h_ttz_zz->Scale(1.0/h_ttz_zz->Integral());
+  h_ttz_zz->SetLineColor(kMagenta-4);
+  h_ttz_zz->SetLineWidth(2);
+
+  //WZ
+  tree_WZ->Draw(Form("disc_ZZ>>wz_ZZ(%d,0,1)", npoints), "", "goff");
+  TH1F* h_wz_zz = (TH1F*)gDirectory->Get("wz_ZZ");
+  h_wz_zz->Scale(1.0/h_wz_zz->Integral());
+  h_wz_zz->SetLineColor(kGreen-3);
+  h_wz_zz->SetLineWidth(2);
+  
   h_signal->SetStats(0);
   h_signal->SetXTitle("disc_ZZ");
   h_signal->SetYTitle("Fraction of events");
   h_signal->SetTitle("");
   h_signal->Draw("HIST");
   h_ZZ->Draw("same+HIST");
+  //h_ttz_zz->Draw("same+HIST");
+  //h_wz_zz->Draw("same+HIST");
 
-
-
+  
+  
   TLegend* leg = new TLegend( 0.2, 0.76, 0.5, 0.89, NULL, "brNDC" );
   leg->SetBorderSize(0);
   leg->SetLineColor(1);
@@ -69,10 +85,37 @@ int main()
   leg->SetFillStyle(1001);
   leg->AddEntry( h_signal, "WWZ (4l)", "l" );
   leg->AddEntry( h_ZZ, "ZZ (4l)", "l" );
+  //leg->AddEntry( h_ttz_zz, "ttZ (4l)", "l" );
+  //leg->AddEntry( h_wz_zz, "WZ (4l)", "l" );
   leg->Draw();
   c->SetLogy();
   c->SaveAs("disc_ZZ_WWZ_vs_ZZ.pdf");
 
+  THStack* stack = new THStack( "hs" , "Hgg Stack " );
+  h_wz_zz->SetFillColor(kGreen-3);
+  h_ttz_zz->SetFillColor(kMagenta-4);
+  h_ZZ->SetFillColor(kOrange+7);
+  stack->Add( h_ZZ, "histo" );
+  stack->Add( h_ttz_zz, "histo" );
+  stack->Add( h_wz_zz, "histo" );
+  
+  h_signal->Draw("");
+  stack->Draw("same");
+  h_signal->Draw("HIST+same");
+
+  leg = new TLegend( 0.2, 0.76, 0.5, 0.89, NULL, "brNDC" );
+  leg->SetBorderSize(0);
+  leg->SetLineColor(1);
+  leg->SetLineStyle(1);
+  leg->SetLineWidth(1);
+  leg->SetFillColor(0);
+  leg->SetFillStyle(1001);
+  leg->AddEntry( h_signal, "WWZ (4l)", "l" );
+  leg->AddEntry( h_ZZ, "ZZ (4l)", "lf" );
+  leg->AddEntry( h_ttz_zz, "ttZ (4l)", "lf" );
+  leg->AddEntry( h_wz_zz, "WZ (4l)", "lf" );
+  leg->Draw();
+  c->SaveAs("disc_ZZ_stack.pdf");
   //ROC CURVE
   
   float bkg_eff[npoints];

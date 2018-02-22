@@ -4,22 +4,22 @@
 
 int main()
 {
-
-
   int nbins = 50;
   float x_low  = 0.0;
   float x_high = 1.0;
-  
-  TFile* fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+
+  std::cout << "=================== WWZ ==================" << std::endl;
+  //WWZ
+  TFile* fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_WWZJetsTo4L2Nu_4f_TuneCUETP8M1_13TeV_aMCatNLOFxFx_pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_signal = (TTree*)fin->Get("WWZAnalysis");
   
   WWZAnalysis* wwz_signal = new WWZAnalysis( tree_signal );
   wwz_signal->h_disc_ZZ = new TH1F("h_signal", "h_signal", nbins, x_low, x_high);
   wwz_signal->Loop();
 
-
+  std::cout << "=================== ZZ ==================" << std::endl;
   //For Bkg ZZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_ZZTo4L_13TeV_powheg_pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_ZZ = (TTree*)fin->Get("WWZAnalysis");
 
   WWZAnalysis* wwz_ZZ = new WWZAnalysis( tree_ZZ );
@@ -27,22 +27,27 @@ int main()
   wwz_ZZ->Loop();
 
 
+   std::cout << "=================== ttZ ==================" << std::endl;
   //For Bkg ttZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/ttZJets_13TeV_madgraphMLM_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_ttZJets_13TeV_madgraphMLM_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
   TTree* tree_ttZ = (TTree*)fin->Get("WWZAnalysis");
 
   WWZAnalysis* wwz_ttZ = new WWZAnalysis( tree_ttZ );
   wwz_ttZ->h_disc_ZZ = new TH1F("h_ttZ", "h_ttZ", nbins, x_low, x_high);
   wwz_ttZ->Loop();
 
+  std::cout << "=================== WZ ==================" << std::endl;
   //For Bkg WZ
-  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
-  //fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_mllmin01_13TeV-powheg-pythia8_ext1_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+  fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/NewLeptonID/WWZAnalysis_WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_1pb_weighted_lep34Mass_ZZDiscriminator_ttZDiscriminator.root", "READ");
+  //fin = new TFile("/Users/cmorgoth/Work/data/WWZanalysis/MC/jobs3/WZTo3LNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8_ALL_1pb_weighted_leptonBaseline_plus_differentFlavor_ttZDiscriminator_ZZDiscriminator.root", "READ");
+ 
   TTree* tree_WZ = (TTree*)fin->Get("WWZAnalysis");
 
   WWZAnalysis* wwz_WZ = new WWZAnalysis( tree_WZ );
   wwz_WZ->h_disc_ZZ = new TH1F("h_WZ", "h_WZ", nbins, x_low, x_high);
   wwz_WZ->Loop();
+
+  wwz_WZ->h_disc_ZZ->Scale(1.);
 
   
   TH1F* h_data = new TH1F("data","data", nbins, x_low, x_high);
@@ -50,6 +55,9 @@ int main()
   h_data->Add(wwz_ttZ->h_disc_ZZ);
   h_data->Add(wwz_signal->h_disc_ZZ);
   h_data->Add(wwz_WZ->h_disc_ZZ);
+
+  std::cout << "====================" << std::endl;
+  std::cout << "s/sqrt(b) = " << wwz_signal->h_disc_ZZ->Integral()/(wwz_ttZ->h_disc_ZZ->Integral()+wwz_WZ->h_disc_ZZ->Integral()) << std::endl;
 
   std::ofstream ofs ("datacards.txt", std::ofstream::out);
   ofs << "imax 1\n";
@@ -84,7 +92,7 @@ int main()
   //                              so divide the unit gaussian by 2 before doing the interpolation
   ofs.close();
   
-  TFile* fout = new TFile("dataCardShapes_NoWZ.root", "RECREATE");
+  TFile* fout = new TFile("dataCardShapes.root", "RECREATE");
   wwz_ZZ->h_disc_ZZ->Write("WWZ_bkg_ZZ");
   wwz_ttZ->h_disc_ZZ->Write("WWZ_bkg_ttZ");
   wwz_signal->h_disc_ZZ->Write("WWZ_signal");

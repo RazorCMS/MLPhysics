@@ -78,19 +78,19 @@ void WWZAnalysis::Loop()
      if (!(leadLeptonPt > 25 && subleadLeptonPt > 15)) continue;
      
      //ZMass Window
-     if (!(ZMass > 76 && ZMass < 106)) continue;
+     //if (!(ZMass > 76 && ZMass < 106)) continue;
      
      //Opposite Charge on Lep3 and Lep4
      if ( abs(lep3Id)/lep3Id ==  abs(lep4Id)/lep4Id ) continue;
      
      //2nd Z Veto
-     if ( fabs(vLep34.M() - 91) < 15 ) continue;
+     //if ( fabs(vLep34.M() - 91) < 15 ) continue;
      
      //MET 
-     if (!(MET > 50)) continue;
+     //if (!(MET > 50)) continue;
      
      //BJet Veto
-     if (!(NBJet20 == 0)) continue;
+     //if (!(NBJet20 == 0)) continue;
      
      //Jet Veto
      //if (!(NJet30 == 0)) continue;
@@ -105,8 +105,9 @@ void WWZAnalysis::Loop()
      //Same Flavor
      //if ( abs(lep3Id) != abs(lep4Id) ) continue;
      
+     if ( !(lep3PassLooseMVAID==1 && lep4PassLooseMVAID==1) ) continue;
      
-     //if ( disc_ttZ < 0.991 ) continue;
+     if ( disc_ttZ < 0.9835 ) continue;
      h_disc_ZZ->Fill(disc_ZZ, weight*1000.0*lumi);//100/fb events
      
      npassed += weight;
