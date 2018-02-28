@@ -1,8 +1,8 @@
 This directory contains Python scripts to train and evaluate XGBoost models to discriminate signal from background in the displaced photon SUSY search.
 
--`PhotonTraining.py`: loads the data from ROOT, trains the model, creates a ROC curve, and saves the model to a pickle file.
--`PhotonTraining_onQCD.py`, `PhotonTraining_onGJets.py`: load the model saved by `PhotonTraining.py` and test on the other background processes.
--'PhotonTraining_overlay.py', 'PhotonTraining_overlay_lifetimes.py','PhotonTraining_VariableOverlay.py','PhotonTraining_Variable7_timing.py' are similar files to PhotonTraining.py but they take multiple signal files and make overlayed ROC curves to compare lifetimes, masses, or the inclusion of different variables
+- `PhotonTraining.py`: loads the data from ROOT, trains the model, creates a ROC curve, and saves the model to a pickle file.
+- `PhotonTraining_onQCD.py`, `PhotonTraining_onGJets.py`: load the model saved by `PhotonTraining.py` and test on the other background processes.
+- `PhotonTraining_overlay.py`, `PhotonTraining_overlay_lifetimes.py`, `PhotonTraining_VariableOverlay.py`, `PhotonTraining_Variable7_timing.py` are similar files to PhotonTraining.py but they take multiple signal files and make overlayed ROC curves to compare lifetimes, masses, or the inclusion of different variables
 
 Input files are located on lxplus:
 `/afs/cern.ch/work/g/gkopp/Thesis/MC_Nov24_noIsoCut_barrelskim/`
