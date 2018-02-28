@@ -6,3 +6,5 @@ This directory contains Python scripts to train and evaluate XGBoost models to d
 
 Input files are located on lxplus:
 `/afs/cern.ch/work/g/gkopp/Thesis/MC_Nov24_noIsoCut_barrelskim/`
+and duplicated to public area
+`/afs/cern.ch/work/g/gkopp/public/ThesisROOTfiles`
