@@ -8,3 +8,14 @@ Input files are located on lxplus:
 `/afs/cern.ch/work/g/gkopp/Thesis/MC_Nov24_noIsoCut_barrelskim/`
 and duplicated to public area
 `/afs/cern.ch/work/g/gkopp/public/ThesisROOTfiles`
+
+### Setup
+```
+git clone https://github.com/RazorCMS/MLPhysics.git
+cd MLPhysics/displaced_photon_classifier/
+cmsrel CMSSW_9_3_3
+cd CMSSW_9_3_3/src/
+cmsenv
+cd -
+python PhotonTraining.py
+```
