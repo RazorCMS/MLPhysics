@@ -26,4 +26,4 @@ If want to run on another type of background, then the file `PhotonTraining_onGJ
 
 This is currently set to run on the files from `/afs/cern.ch/work/g/gkopp/public/ThesisROOTfiles/`. These files are from the Monte Carlo that Zhicai made, and I skimmed the ROOT files on pho1Pt > 0 and for in barrel photons.
 
-*Note* the discriminator values are set to -1 for the events that have been used in the training set - and these events should never be used again since they would make it biased.
+*Note the discriminator values are set to -1 for the events that have been used in the training set* - and these events should never be used again since they would make it biased.
