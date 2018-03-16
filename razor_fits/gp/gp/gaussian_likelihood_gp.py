@@ -29,12 +29,14 @@ class GaussianLikelihoodGP(GaussianProcess):
         self.K = None
         self.Sigma = None
         self.Sigma_inv = None
+        self.log_det_Sigma = None
 
     def clear(self):
         self.mu = None
         self.K = None
         self.Sigma = None
         self.Sigma_inv = None
+        self.log_det_Sigma = None
 
     def get_mu(self):
         if self.mu is not None:
@@ -51,7 +53,8 @@ class GaussianLikelihoodGP(GaussianProcess):
     def get_Sigma(self):
         if self.Sigma is not None:
             return self.Sigma
-        self.Sigma = self.get_K() + self.sigma2.diag()
+        self.Sigma = self.get_K() + self.sigma2 * Variable(torch.eye(self.U.size(0)))
+        #self.Sigma = self.get_K() + self.sigma2.diag()
         return self.Sigma
 
     def get_Sigma_inv(self):
@@ -60,18 +63,30 @@ class GaussianLikelihoodGP(GaussianProcess):
         self.Sigma_inv = self.get_Sigma().inverse()
         return self.Sigma_inv
 
-    def log_p(self):
+    def get_log_det_Sigma(self):
+        if self.log_det_Sigma is not None:
+            return self.log_det_Sigma
+        Sigma = self.get_Sigma()
+        # torch.potrf computes the Cholesky decomposition A s.t.
+        # Sigma = AA^T and A is lower triangular.  The determinant
+        # of A is sqrt(det Sigma), so log det A is 0.5 log det Sigma.
+        # The determinant is A is the product of its diagonal entries.
+        chol = torch.potrf(Sigma, False)
+        self.log_det_Sigma = 2 * chol.diag().log().sum()
+        return self.log_det_Sigma
+
+    def neg_log_p(self):
         Y = self.Y
         B = self.B
         mu = self.get_mu()
         Sigma = self.get_Sigma()
         Sigma_inv = self.get_Sigma_inv()
 
-        term1 = 0.5 * torch.det(Sigma).log()
-        term2 = (Y - mu).transpose(0, 1).matmul(Sigma_inv).matmul(Y - mu)
+        term1 = 0.5 * self.get_log_det_Sigma()
+        term2 = (Y - mu).dot(torch.mv(Sigma_inv, Y - mu))
         term3 = B / 2 * np.log(2 * np.pi)
 
-        return -term1 - term2 - term3
+        return term1 + term2 + term3
 
     def predict_mean(self, V):
         U = self.U
@@ -82,7 +97,7 @@ class GaussianLikelihoodGP(GaussianProcess):
         mu_V = self.mean(V)
         K_VU = self.kernel.forward(V, U)
 
-        return mu_V + K_VU.matmul(Sigma_inv).matmul(Y - mu)
+        return mu_V + torch.mv(K_VU, torch.mv(Sigma_inv, Y - mu))
 
     def predict_Sigma(self, V):
         U = self.U
@@ -95,10 +110,29 @@ class GaussianLikelihoodGP(GaussianProcess):
         K_VU = self.kernel.forward(V, U)
         K_UV = K_VU.transpose(0, 1)
 
-        return Sigma_VV - K_VU.matmul(Sigma_inv).matmul(K_UV)
+        out = Sigma_VV - torch.mm(K_VU, torch.mm(Sigma_inv, K_UV))
+        # Add a tiny multiple of the identity to avoid 
+        # the matrix being considered non-positive-semidefinite by numpy
+        epsilon = 1e-8
+        min_eig = torch.min(torch.eig(out)[0][:,0]).data.numpy()[0]
+        if min_eig < 0:
+            print("Min eigenvalue is negative: {}".format(min_eig))
+            epsilon = max(epsilon, -10 * min_eig)
+        out = out + Variable(torch.Tensor([epsilon])) * Variable(torch.eye(out.size()[0]))
+        return out
 
     def predict(self, V):
+        """
+        Gets the predicted mean and covariance of the GP for new inputs V.
+        """
         V = Variable(V)
         pred_mean = self.predict_mean(V)
         pred_Sigma = self.predict_Sigma(V) 
         return pred_mean, pred_Sigma
+
+    def sample(self, v, num_samples=1):
+        v = torch.Tensor([v])
+        pred_mean, pred_Sigma = self.predict(v)
+        gauss = Variable(torch.randn(num_samples))
+        return (gauss.data.numpy() * pred_Sigma.data.numpy() 
+                + pred_mean.data.numpy())[0]

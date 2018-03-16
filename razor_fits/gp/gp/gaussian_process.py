@@ -1,11 +1,11 @@
 import torch
 from torch.autograd import Variable
 
-class GaussianProcess(object):
+class GaussianProcess(torch.nn.Module):
     """
     Base class for GP models.
-    Derived classes should implement the predict() and 
-    logp() functions.
+    Derived classes should implement the sample() and 
+    neg_log_p (negative log marginal likelihood) functions.
     Attributes:
         kernel: Kernel object defining the similarity measure
         U (torch Tensor): locations of observed data points
@@ -15,6 +15,7 @@ class GaussianProcess(object):
     """
 
     def __init__(self, kernel, U, Y, mean=None):
+        super(GaussianProcess, self).__init__()
         self.kernel = kernel
         self.U = Variable(U)
         self.Y = Variable(Y)
@@ -23,15 +24,15 @@ class GaussianProcess(object):
             mean = torch.zeros_like
         self.mean = mean
 
-    def log_p(self):
-        """Returns the log marginal likelihood of the observed data."""
+    def neg_log_p(self):
+        """Returns the negative log marginal likelihood of the observed data."""
         raise NotImplementedError(
                 "Please do not use the GaussianProcess class directly")
 
-    def predict(self, V):
+    def sample(self, v, num_samples=1):
         """
-        Predicts the function value(s) at new input locations V.
-        The return type may be different for different kinds of GP.
+        Samples the function value(s) at a new input location v.
+        Returns a numpy array of samples.
         """
         raise NotImplementedError(
                 "Please do not use the GaussianProcess class directly")

@@ -1,17 +1,15 @@
 import torch
 from torch.autograd import Variable
 
-class Kernel(object):
+class Kernel(torch.nn.Module):
     """
     Base class for GP kernels.
     Derived classes should implement the forward() function that
     specifies how the kernel operates on two input vectors.
-    Attributes:
-        parameters: list of torch Variables representing hyperparameters
     """
 
     def __init__(self):
-        self.parameters = []
+        super(Kernel, self).__init__()
 
     def forward(self, U, V):
         """
@@ -32,15 +30,15 @@ class SquaredExponentialKernel(Kernel):
 
     def __init__(self, ell, alpha):
         assert alpha > 0, "alpha must be positive"
+        super(SquaredExponentialKernel, self).__init__()
 
         # check if ell is a scalar and wrap it in a list if not
         try:
             iter(ell)
         except TypeError:
             ell = [ell]
-        self.ell = Variable(torch.Tensor(ell), requires_grad=True)
-        self.alpha = Variable(torch.Tensor([alpha]), requires_grad=True)
-        self.parameters = [self.ell, self.alpha]
+        self.ell = torch.nn.Parameter(torch.Tensor(ell))
+        self.alpha = torch.nn.Parameter(torch.Tensor([alpha]))
 
     def forward(self, U, V):
         assert (len(U.size()) < 3 and len(V.size()) < 3), (
@@ -58,4 +56,4 @@ class SquaredExponentialKernel(Kernel):
             norm = diff.pow(2).sum(dim=-1) / (2 * ell * ell)
         else:
             norm = diff.pow(2) / (2 * self.ell * self.ell)
-        return self.alpha * torch.exp(norm)
+        return self.alpha * torch.exp(-norm)
