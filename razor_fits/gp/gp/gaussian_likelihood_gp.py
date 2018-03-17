@@ -13,18 +13,21 @@ class GaussianLikelihoodGP(GaussianProcess):
     before e.g. evaluating the GP with new kernel hyperparameters.
     Attributes:
         sigma2: torch Tensor of the same shape as Y representing uncorrelated
-                Gaussian noise on the outputs.  Here we are using the Gaussian
-                likelihood as an approximation to the Poisson and take 
-                sigma^2 = y pointwise (as in the Frate et al. paper).
+                Gaussian noise on the outputs.  
+                If not provided as an input to __init__, it defaults to
+                the choice in the Frate et al. paper, sigma^2 = y pointwise.
         K: placeholder for the covariance matrix K.
         mu: placeholder for the prior mean.
         Sigma: placeholder for the covariance matrix Sigma = K + sigma^2 I.
         Sigma_inv: placeholder for the inverse of (K + sigma^2 I).
     """
 
-    def __init__(self, kernel, U, Y, mean=None):
+    def __init__(self, kernel, U, Y, mean=None, sigma2=None):
         super(GaussianLikelihoodGP, self).__init__(kernel, U, Y, mean)
-        self.sigma2 = self.Y
+        if sigma2 is None:
+            self.sigma2 = self.Y
+        else:
+            self.sigma2 = torch.nn.Parameter(torch.Tensor([sigma2]))
         self.mu = None
         self.K = None
         self.Sigma = None
@@ -53,8 +56,11 @@ class GaussianLikelihoodGP(GaussianProcess):
     def get_Sigma(self):
         if self.Sigma is not None:
             return self.Sigma
-        self.Sigma = self.get_K() + self.sigma2 * Variable(torch.eye(self.U.size(0)))
-        #self.Sigma = self.get_K() + self.sigma2.diag()
+        if self.sigma2.size()[0] > 1: # vector of pointwise variances
+            noise = self.sigma2.diag()
+        else: # scalar variance
+            noise = self.sigma2 * Variable(torch.eye(self.U.size(0)))
+        self.Sigma = self.get_K() + noise
         return self.Sigma
 
     def get_Sigma_inv(self):
@@ -83,8 +89,8 @@ class GaussianLikelihoodGP(GaussianProcess):
         Sigma_inv = self.get_Sigma_inv()
 
         term1 = 0.5 * self.get_log_det_Sigma()
-        term2 = (Y - mu).dot(torch.mv(Sigma_inv, Y - mu))
-        term3 = B / 2 * np.log(2 * np.pi)
+        term2 = 0.5 * (Y - mu).dot(torch.mv(Sigma_inv, Y - mu))
+        term3 = 0.5 * B * np.log(2 * np.pi)
 
         return term1 + term2 + term3
 
