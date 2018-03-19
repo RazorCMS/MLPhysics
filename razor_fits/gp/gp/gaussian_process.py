@@ -29,10 +29,14 @@ class GaussianProcess(torch.nn.Module):
         raise NotImplementedError(
                 "Please do not use the GaussianProcess class directly")
 
-    def sample(self, v, num_samples=1):
+    def sample(self, v, num_samples=1, use_noise=False):
         """
         Samples the function value(s) at a new input location v.
         Returns a numpy array of samples.
+        If use_noise is False, should return samples of the function value.
+        If it's True, should return data samples generated from the function
+        (so randomness on both the function and the observation 
+            process is included).
         """
         raise NotImplementedError(
                 "Please do not use the GaussianProcess class directly")

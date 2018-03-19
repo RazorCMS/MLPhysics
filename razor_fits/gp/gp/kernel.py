@@ -107,7 +107,7 @@ class ConstantKernel(Kernel):
 class ExponentialKernel(Kernel):
     """
     Kernel whose strength decreases exponentially with the values of its inputs
-    (note: NOT with the distance between them): K(u, v) = exp(-(u + v)/(2a)).
+    (note: NOT with the distance between them): K(u, v) = exp(-a(u + v)).
     """
     
     def __init__(self, a):
@@ -120,7 +120,7 @@ class ExponentialKernel(Kernel):
         # TODO: handle multidimensional a
         mat1, mat2 = self.expand_inputs(U, V)
         a = torch.exp(self.log_a)
-        return torch.exp(-(mat1 + mat2)/(2*a))
+        return torch.exp(-a * (mat1 + mat2))
 
 
 class GibbsKernel(Kernel):
@@ -184,6 +184,18 @@ class PhysicsInspiredKernel(Kernel):
         self.constant_kernel = ConstantKernel(A)
         self.exp_kernel = ExponentialKernel(a)
         self.linear_kernel = LinearGibbsKernel(b, c)
+
+    @property
+    def log_a(self):return self.exp_kernel.log_a
+    
+    @property
+    def log_b(self):return self.linear_kernel.log_b
+    
+    @property
+    def log_c(self):return self.linear_kernel.log_c
+    
+    @property
+    def log_A(self): return self.constant_kernel.log_A
 
     def forward(self, U, V):
         constant = self.constant_kernel.forward(U, V)

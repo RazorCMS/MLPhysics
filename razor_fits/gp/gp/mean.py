@@ -1,6 +1,8 @@
 import torch
 from torch.autograd import Variable
 
+from .kernel import make_log_par
+
 class Mean(torch.nn.Module):
     """
     Base class for GP mean functions.
@@ -26,9 +28,13 @@ class ExponentialMean(Mean):
 
     def __init__(self, N, slope):
         super(ExponentialMean, self).__init__()
+        assert N > 0, "N must be positive"
+        assert slope > 0, "slope must be positive"
 
-        self.N = torch.nn.Parameter(torch.Tensor([N]))
-        self.slope = torch.nn.Parameter(torch.Tensor([slope]))
+        self.log_N = make_log_par(N)
+        self.log_slope = make_log_par(slope)
 
     def forward(self, U):
-        return self.N * torch.exp(-self.slope * U)
+        N = self.log_N.exp()
+        slope = self.log_slope.exp()
+        return N * torch.exp(-slope * U)

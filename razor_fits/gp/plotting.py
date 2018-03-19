@@ -4,6 +4,7 @@ import scipy.optimize as optimize
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import seaborn as sns
+import torch
 
 import razor_data
 
@@ -57,7 +58,8 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
 
     if G is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
-        samples = [G.sample(x, num_samples=num_samples) for x in binned['u']]
+        samples = [G.sample(x, num_samples=num_samples,
+            use_noise=False) for x in binned['u']]
         bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
         plt.fill_between(centers, bands[2.5], bands[97.5], 
                 facecolor='b', alpha=0.35)
@@ -77,17 +79,30 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
 
     plt.show()
 
-def plot_nsigma_1d(binned, G, num_samples=40000):
+def plot_nsigma_1d(binned, G, num_samples=40000,
+        use_poisson_noise=False):
     """
     Inputs:
         binned: dataset loaded by Razor1DDataset or Razor2DDataset
         G: Gaussian Process object with a sample() method.
+        num_samples: number of samples to draw for each nsigma computation
+        use_poisson_noise: only set to True if approximating Poisson noise
+            using the observed data counts (for Gaussian GP likelihood)
     Plots the distribution of significances between data and fit.
     """
     centers = binned['u']
     counts = binned['y'].numpy()
-    samples = [G.sample(x, num_samples=num_samples) for x in centers]
+    if use_poisson_noise:
+        samples = [G.sample(x, num_samples=num_samples,
+            use_noise=True, poisson_noise_vector=torch.Tensor([float(counts[i])])) 
+            for i, x in enumerate(centers)]
+    else:
+        samples = [G.sample(x, num_samples=num_samples,
+            use_noise=True) for x in centers]
     nsigma = compute_nsigma(counts, samples)
+    if np.isinf(nsigma).any():
+        print("Error: at least one nsigma is infinite")
+        return
 
     bin_width = 0.2
     bin_edges = np.append(np.arange(-4, 4, bin_width), [4.0])
@@ -133,3 +148,18 @@ def plot_hist_2d(binned, annot=False, cmap='afmhot', title=None):
     if title is not None:
         plt.title(title, fontsize=16)
     plt.show()
+
+def plot_covariance(G, cmap='afmhot', use_noise=False):
+    """
+    Input: Gaussian Process object
+    """
+    if use_noise:
+        cov = G.Sigma
+    else:
+        cov = G.K
+    cov = cov.data.numpy()
+    plt.subplots(figsize=(10, 8))
+    ax = sns.heatmap(cov, cmap=cmap, fmt='g',
+            xticklabels=G.U.data.numpy().round(-1).astype(int),
+            yticklabels=G.U.data.numpy().round(-1).astype(int))
+
