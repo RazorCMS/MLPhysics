@@ -122,6 +122,26 @@ class GaussianLikelihoodGP(GaussianProcess):
 
         return term1 + term2 + term3
 
+    def fit(self, num_steps=1000, verbose=True):
+        optim = torch.optim.LBFGS(self.parameters(), lr=0.01)
+        def closure():
+            optim.zero_grad()
+            self.clear()
+            nlogp = self.neg_log_p()
+            nlogp.backward()
+            return nlogp
+        for i in range(num_steps):
+            optim.zero_grad()
+            self.clear()
+            nlogp = self.neg_log_p()
+            nlogp.backward()
+            optim.step(closure) 
+        self.clear()
+        if verbose:
+            print('Best-fit parameters: ',
+                  ' '.join(['{:.2f}'.format(p.exp().data.numpy()[0]) 
+                            for p in self.parameters()]))
+
     def predict_mean(self, V):
         U = self.U
         Y = self.Y
