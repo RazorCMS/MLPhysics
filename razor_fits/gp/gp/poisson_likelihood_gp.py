@@ -126,45 +126,26 @@ class PoissonLikelihoodGP(GaussianProcess):
         """
         ll = self.log_likelihood()
         lp = self.log_prior()
-        print(ll, lp)
         return -ll - lp
 
-    def fit(self, num_steps=25, verbose=True,
-            lr_g=0.0001, lr_k=0.001):
-        # LBFGS does not support per-parameter learning rates.
-        # We will optimize g separately from the kernel because
-        # the learning rates required seem to be quite different.
-        optim_g = torch.optim.LBFGS([self.g], lr=lr_g)
-        optim_k = torch.optim.LBFGS(self.kernel.parameters(), lr=lr_k)
+    def fit(self, num_steps=25, verbose=True, lr=0.0001):
+        # LBFGS does not do a good job of fitting the kernel parameters.
+        # We leave them fixed and optimize the latent function values.
+        optim = torch.optim.LBFGS([self.g], lr=lr)
         clip = 500
-        def closure_g():
-            optim_g.zero_grad()
+        def closure():
+            optim.zero_grad()
             self.clear()
             nlogp = self.neg_log_p()
             nlogp.backward()
             torch.nn.utils.clip_grad_norm([self.g], clip)
             return nlogp
-        def closure_k():
-            optim_k.zero_grad()
-            self.clear()
-            nlogp = self.neg_log_p()
-            nlogp.backward()
-            torch.nn.utils.clip_grad_norm(self.kernel.parameters(), clip)
-            return nlogp
         for i in range(num_steps):
-            nlogp = closure_k()
-            optim_k.step(closure_k)
-            nlogp = closure_g()
-            optim_g.step(closure_g)
+            nlogp = closure()
+            optim.step(closure)
             if verbose and i % 100 == 0:
-                print(i, ' '.join(['{:.2f}'.format(p.exp().data.numpy()[0]) 
-                                for p in self.kernel.parameters()]), 
-                                nlogp.data.numpy()[0])
+                print("Iteration {} of {}".format(i, num_steps))
         self.clear()
-        if verbose:
-            print('Best-fit kernel parameters: ',
-                  ' '.join(['{:.2f}'.format(p.exp().data.numpy()[0]) 
-                            for p in self.kernel.parameters()]))
 
     def predict(self, V):
         """
