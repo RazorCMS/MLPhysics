@@ -48,7 +48,7 @@ def gauss_fit(bin_centers, counts):
 ### PLOTTING FUNCTIONS
 
 def plot_hist_1d(binned, log=True, G=None, title=None,
-        num_samples=4000, use_noise=False):
+        num_samples=4000, use_noise=False, verbose=False):
     """
     Input: binned data loaded by Razor1DDataset class.
     Optionally provide a Gaussian Process object, G, with a 
@@ -62,7 +62,7 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
 
     if G is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
-        samples = [G.sample(x, num_samples=num_samples,
+        samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
             use_noise=use_noise) for x in binned['u']]
         bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
         plt.fill_between(centers, bands[2.5], bands[97.5], 
@@ -84,7 +84,7 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
     plt.show()
 
 def plot_nsigma_1d(binned, G, num_samples=40000,
-        use_poisson_noise=False):
+        use_poisson_noise=False, verbose=False):
     """
     Inputs:
         binned: dataset loaded by Razor1DDataset or Razor2DDataset
@@ -97,11 +97,12 @@ def plot_nsigma_1d(binned, G, num_samples=40000,
     centers = binned['u']
     counts = binned['y'].numpy()
     if use_poisson_noise:
-        samples = [G.sample(x, num_samples=num_samples,
-            use_noise=True, poisson_noise_vector=torch.Tensor([float(counts[i])])) 
+        samples = [G.sample(x, num_samples=num_samples, 
+            use_noise=True, verbose=verbose,
+            poisson_noise_vector=torch.Tensor([float(counts[i])])) 
             for i, x in enumerate(centers)]
     else:
-        samples = [G.sample(x, num_samples=num_samples,
+        samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
             use_noise=True) for x in centers]
     nsigma = compute_nsigma(counts, samples)
     if np.isinf(nsigma).any():

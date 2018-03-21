@@ -204,7 +204,7 @@ class GaussianLikelihoodGP(GaussianProcess):
         return pred_mean, pred_Sigma
 
     def sample(self, v, num_samples=1, use_noise=False, 
-            poisson_noise_vector=None):
+            poisson_noise_vector=None, verbose=False):
         v = torch.Tensor([v])
         pred_mean, pred_Sigma = self.predict(v, use_noise=use_noise,
                 poisson_noise_vector=poisson_noise_vector)
