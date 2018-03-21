@@ -37,14 +37,18 @@ def gauss_fit(bin_centers, counts):
     https://stackoverflow.com/questions/11507028/fit-a-gaussian-function
     """
     guess = [0., 1.]
-    (mu, sigma), _ = optimize.curve_fit(gauss, bin_centers, counts, p0=guess)
+    try:
+        (mu, sigma), _ = optimize.curve_fit(gauss, bin_centers, counts, p0=guess)
+    except RuntimeError:
+        print("Gaussian fit failed for nsigma distribution!")
+        mu, sigma = None, None
     return mu, sigma
 
 
 ### PLOTTING FUNCTIONS
 
 def plot_hist_1d(binned, log=True, G=None, title=None,
-        num_samples=4000):
+        num_samples=4000, use_noise=False):
     """
     Input: binned data loaded by Razor1DDataset class.
     Optionally provide a Gaussian Process object, G, with a 
@@ -59,7 +63,7 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
     if G is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
         samples = [G.sample(x, num_samples=num_samples,
-            use_noise=False) for x in binned['u']]
+            use_noise=use_noise) for x in binned['u']]
         bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
         plt.fill_between(centers, bands[2.5], bands[97.5], 
                 facecolor='b', alpha=0.35)
@@ -108,20 +112,19 @@ def plot_nsigma_1d(binned, G, num_samples=40000,
     bin_edges = np.append(np.arange(-4, 4, bin_width), [4.0])
     hist, bin_edges = np.histogram(nsigma, bins=bin_edges, density=True)
     bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.
+    fig, ax = plt.subplots(figsize=(8, 6))
 
     bin_width_fine = 0.01
     bin_edges_fine = np.arange(-4, 4, bin_width_fine)
     mu, sigma = gauss_fit(bin_centers, hist) 
-    fit = gauss(bin_edges_fine, mu, sigma)
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    plt.plot(bin_edges_fine, fit, 'r', linewidth=3.0)
+    if mu is not None and sigma is not None:
+        fit = gauss(bin_edges_fine, mu, sigma)
+        plt.plot(bin_edges_fine, fit, 'r', linewidth=3.0)
+        plt.text(0.05, 0.75, "Fitted mean: {:.2f}".format(mu), fontsize=14,
+                transform=ax.transAxes)
+        plt.text(0.05, 0.80, "Fitted sigma: {:.2f}".format(sigma), fontsize=14,
+                transform=ax.transAxes)
     plt.bar(bin_edges[:-1], hist, color='b', align='edge', width=bin_width)
-
-    plt.text(0.05, 0.75, "Fitted mean: {:.2f}".format(mu), fontsize=14,
-            transform=ax.transAxes)
-    plt.text(0.05, 0.80, "Fitted sigma: {:.2f}".format(sigma), fontsize=14,
-            transform=ax.transAxes)
     plt.xlim(-5, 5)
     plt.xlabel('Significance', fontsize=16)
     plt.ylabel('A.U.', fontsize=16)

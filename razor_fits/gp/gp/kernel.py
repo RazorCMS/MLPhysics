@@ -104,23 +104,26 @@ class ConstantKernel(Kernel):
         return torch.exp(self.log_A)
 
 
-class ExponentialKernel(Kernel):
+class ExponentialDecayKernel(Kernel):
     """
     Kernel whose strength decreases exponentially with the values of its inputs
     (note: NOT with the distance between them): K(u, v) = exp(-a(u + v)).
+    The offset parameter represents the lower bound of the fit range
+    and is not optimized during fitting.
     """
     
-    def __init__(self, a):
+    def __init__(self, a, offset=650):
         assert a > 0, "a must be positive"
-        super(ExponentialKernel, self).__init__()
+        super(ExponentialDecayKernel, self).__init__()
 
         self.log_a = make_log_par(a)
+        self.offset = Variable(torch.Tensor([offset]))
 
     def forward(self, U, V):
         # TODO: handle multidimensional a
         mat1, mat2 = self.expand_inputs(U, V)
         a = torch.exp(self.log_a)
-        return torch.exp(-a * (mat1 + mat2))
+        return torch.exp(-a * (mat1 + mat2 - 2 * self.offset))
 
 
 class GibbsKernel(Kernel):
@@ -131,8 +134,10 @@ class GibbsKernel(Kernel):
     (to be defined in subclasses).
     """
     
-    def __init__(self):
+    def __init__(self, alpha):
         super(GibbsKernel, self).__init__()
+
+        self.log_alpha = make_log_par(alpha)
 
     def l(self, x):
         raise NotImplementedError(
@@ -143,10 +148,11 @@ class GibbsKernel(Kernel):
         l1 = self.l(mat1)
         l2 = self.l(mat2)
         lsquared = l1.pow(2) + l2.pow(2)
+        alpha = self.log_alpha.exp()
 
         # This prefactor is needed to make the kernel
         # positive definite for all possible inputs
-        prefactor = torch.sqrt(2 * l1 * l2 / lsquared)
+        prefactor = alpha * torch.sqrt(2 * l1 * l2 / lsquared)
 
         return prefactor * torch.exp(-(mat1 - mat2).pow(2) / lsquared)
 
@@ -157,8 +163,8 @@ class LinearGibbsKernel(GibbsKernel):
     l(x) = bx + c.
     """
 
-    def __init__(self, b, c):
-        super(LinearGibbsKernel, self).__init__()
+    def __init__(self, alpha, b, c):
+        super(LinearGibbsKernel, self).__init__(alpha)
 
         self.log_b = make_log_par(b)
         self.log_c = make_log_par(c)
@@ -172,18 +178,16 @@ class LinearGibbsKernel(GibbsKernel):
 
 class PhysicsInspiredKernel(Kernel):
     """
-    Product of three kernels:
-        1) a constant kernel (parameter A)
-        2) an exponential kernel (parameter a)
-        3) a linear Gibbs kernel (parameters b, c)
+    Product of two kernels:
+        1) an exponential kernel (parameter a)
+        2) a linear Gibbs kernel (parameters A, b, c)
     """
 
     def __init__(self, A, a, b, c):
         super(PhysicsInspiredKernel, self).__init__()
 
-        self.constant_kernel = ConstantKernel(A)
-        self.exp_kernel = ExponentialKernel(a)
-        self.linear_kernel = LinearGibbsKernel(b, c)
+        self.exp_kernel = ExponentialDecayKernel(a)
+        self.linear_kernel = LinearGibbsKernel(A, b, c)
 
     @property
     def log_a(self):return self.exp_kernel.log_a
@@ -195,10 +199,9 @@ class PhysicsInspiredKernel(Kernel):
     def log_c(self):return self.linear_kernel.log_c
     
     @property
-    def log_A(self): return self.constant_kernel.log_A
+    def log_A(self): return self.linear_kernel.log_alpha
 
     def forward(self, U, V):
-        constant = self.constant_kernel.forward(U, V)
         exp = self.exp_kernel.forward(U, V)
         linear = self.linear_kernel.forward(U, V)
-        return constant * exp * linear
+        return exp * linear
