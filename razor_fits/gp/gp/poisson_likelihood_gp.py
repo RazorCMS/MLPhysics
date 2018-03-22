@@ -21,10 +21,15 @@ class PoissonLikelihoodGP(GaussianProcess):
         f: best-fit function values at each input point
         g: best-fit function values stored in whitened form (i.e. f = Lg)
         samples: list of HMC samples at the observed data point locations
+        hmc_epsilon, hmc_L_max: tuning parameters for Hamiltonian MC.
     """
 
-    def __init__(self, kernel, U, Y, mean=None):
+    def __init__(self, kernel, U, Y, mean=None,
+            hmc_epsilon=0.0001, hmc_L_max=10):
         super(PoissonLikelihoodGP, self).__init__(kernel, U, Y, mean)
+        self.hmc_epsilon = hmc_epsilon
+        self.hmc_L_max = hmc_L_max
+
         self.mu = None
         self.K = None
         self.epsilon = None
@@ -158,7 +163,12 @@ class PoissonLikelihoodGP(GaussianProcess):
         # TODO
         pass
 
-    def do_hmc(self, num_samples, epsilon, L_max, print_every, verbose=False):
+    def do_hmc(self, num_samples, epsilon=None, L_max=None, 
+            print_every=200, verbose=False):
+        if epsilon is None:
+            epsilon = self.hmc_epsilon
+        if L_max is None:
+            L_max = self.hmc_L_max
         hmc = run_hmc(self, [self.g], num_samples=(num_samples*2),
                 epsilon=epsilon, L_max=L_max, 
                 print_every=print_every, verbose=verbose)
@@ -167,35 +177,34 @@ class PoissonLikelihoodGP(GaussianProcess):
         # (discarding the first half as warm-up)
         return np.asarray([s[0] for s in hmc.samples[num_samples:]])
 
-    def sample(self, v, num_samples=1, use_noise=False, verbose=False):
+    def sample(self, v=None, num_samples=1, use_noise=False, verbose=False,
+            print_every=None):
         """
         Currently this samples the observed data locations using HMC.
         Predicting non-data locations is not supported yet.
         """
-        print_every = 100
-        if num_samples > 2000:
-            print_every = 500
-        epsilon = 0.0001
-        L_max = 10
+        if print_every is None:
+            print_every = 100
+            if num_samples > 2000:
+                print_every = 500
         # Generate more samples if needed
         if self.samples is not None and len(self.samples) < num_samples:
             samples_needed = num_samples - len(self.samples)
             samples = self.do_hmc(samples_needed, 
-                    epsilon=epsilon, L_max=L_max, 
                     print_every=print_every, verbose=verbose)
             self.samples = np.concatenate((self.samples, samples))
         elif self.samples is None:
             self.samples = self.do_hmc(num_samples, 
-                    epsilon=epsilon, L_max=L_max, 
                     print_every=print_every, verbose=verbose)
         # Figure out which data point we are sampling
-        U = self.U.data
-        ind = np.where(U == v)[0][0]
-        # TODO: error check in case a non-grid point is passed
-        # or implement prediction for new data points
-        L = self.get_L().data.numpy()
-        mean_samples = np.exp(np.matmul(
-            L, np.expand_dims(self.samples, -1))[:, ind]).flatten() 
-        if use_noise:
-            return np.random.poisson(mean_samples)
-        return mean_samples
+        if v is not None:
+            U = self.U.data
+            ind = np.where(U == v)[0][0]
+            # TODO: error check in case a non-grid point is passed
+            # or implement prediction for new data points
+            L = self.get_L().data.numpy()
+            mean_samples = np.exp(np.matmul(
+                L, np.expand_dims(self.samples, -1))[:, ind]).flatten() 
+            if use_noise:
+                return np.random.poisson(mean_samples)
+            return mean_samples
