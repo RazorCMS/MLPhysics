@@ -131,6 +131,8 @@ class PoissonLikelihoodGP(GaussianProcess):
     def neg_log_p(self):
         """
         Note: computes log likelihood only up to a constant additive factor
+        Note: this is the conditional likelihood P(f | y), not the marginal 
+        likelihood (which is intractable in the Poisson case).
         """
         ll = self.log_likelihood()
         lp = self.log_prior()
@@ -274,13 +276,14 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
         super(PoissonGPWithSignal, self).fit(num_steps, verbose=verbose,
                 lr=lr, parameters=parameters)
 
-    def preds_from_samples(self, use_noise=False):
-        bs = super(PoissonGPWithSignal, self).preds_from_samples(
+    def preds_from_samples(self, use_noise=False, include_signal=False):
+        mean_samples = super(PoissonGPWithSignal, self).preds_from_samples(
                 use_noise=False)
-        sig_shape = self.S.data.numpy()
-        ss = np.asarray([np.exp(s[0]) * sig_shape 
-            for s in self.log_signal_samples])
-        mean_samples = bs + ss
+        if include_signal:
+            sig_shape = self.S.data.numpy()
+            ss = np.asarray([np.exp(s[0]) * sig_shape 
+                for s in self.log_signal_samples])
+            mean_samples = mean_samples + ss
         if use_noise:
             return self.add_noise(mean_samples)
         return mean_samples
@@ -298,9 +301,3 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
                 print_every=print_every, verbose=verbose)
 
         return self.preds_from_samples(use_noise=use_noise)
-
-        # placeholder: give predicted means
-        #self.samples = np.expand_dims(self.g.data.numpy(), 0)
-        #s = np.expand_dims((self.log_signal.exp() * self.S).data.numpy(), 0)
-        #means = self.preds_from_samples() + s
-        #return means

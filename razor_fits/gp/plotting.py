@@ -50,8 +50,9 @@ def gauss_fit(bin_centers, counts):
 ### PLOTTING FUNCTIONS
 
 def plot_hist_1d(binned=None, U=None, Y=None, S=None, 
-        log=True, G=None, samples=None, title=None,
-        num_samples=4000, use_noise=False, verbose=False):
+        G=None, num_samples=4000, use_noise=False,
+        samples=None, samples_withsignal=None,
+        title=None, verbose=False, log=True):
     """
     Input: binned data loaded by Razor1DDataset class
         OR torch Tensors U and Y
@@ -68,6 +69,21 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
+    # Shaded signal shape histogram
+    if S is not None:
+        signal = S.numpy()
+        bin_width = centers[1] - centers[0]
+        edges = centers - bin_width / 2
+        ax.bar(edges, signal, width=bin_width, 
+                linewidth=0, label='Signal', facecolor='darkred', alpha=0.35)
+
+    # Best fit with fitted signal prediction included
+    if samples_withsignal is not None:
+        best_fit = np.percentile(samples_withsignal, 50, axis=0)
+        plt.plot(centers, best_fit, color='forestgreen', alpha=0.8, linewidth=3,
+                label='GP + Signal Fit')
+
+    # Best fit and +/- 1, 2 sigma bands
     if G is not None or samples is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
         if samples is None:
@@ -80,13 +96,12 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
                 facecolor='b', alpha=0.35)
         plt.fill_between(centers, bands[16], bands[84], 
                 facecolor='b', alpha=0.5)
-        plt.plot(centers, bands[50], color='b', label='GP Fit')
+        plt.plot(centers, bands[50], color='b', label='GP Fit', linewidth=1.5)
     
-    if S is not None:
-        signal = S.numpy()
-        ax.plot(centers, signal, 'r', linewidth=1.5, label='Signal')
+    # Data counts
     ax.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
             label='Data') 
+
     ax.tick_params(labelsize=14)
     plt.xlabel('MR', fontsize=16)
     plt.ylabel('Counts', fontsize=16)
@@ -95,7 +110,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     if log:
         plt.yscale('log')
     plt.ylim(ymin=0.1)
-    plt.legend()
+    plt.legend(fontsize=14)
 
     plt.show()
 

@@ -31,6 +31,24 @@ def get_rsq_min(box):
         return 0.20
     return 0.30
 
+def get_signal_norm(sms):
+    """
+    Gets xsec * intlumi for the given signal model
+    """
+    xsecs = {
+            'T1':{1800: 0.00276133, 1000: 0.325388},
+            'T2':{1000: 0.00615134}
+            }
+    nevents = {
+            'T1':{1800: 15000, 1000: 150000},
+            'T2':{1000: 20000}
+            }
+    # our TTJets MC sample corresponds to about 500 ifb of data
+    lumi = 500000
+    model, m, _ = sms.split('_')
+    model = model[:2]
+    m = int(m)
+    return xsecs[model][m] * lumi / nevents[model][m]
 
 ### PANDAS FUNCTIONS
 
@@ -100,6 +118,10 @@ class RazorDataset(torch.utils.data.Dataset):
 
         unbinned = load_mrrsq_data(box, nb, proc=proc)
         self.bin_centers, self.counts = self.convert_to_binned(unbinned)
+
+        # normalize signal samples
+        if 'T1' in proc or 'T2' in proc:
+            self.counts = self.counts * get_signal_norm(proc)
 
     def convert_to_binned(self, unbinned):
         raise NotImplementedError(
