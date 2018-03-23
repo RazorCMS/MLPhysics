@@ -116,6 +116,10 @@ class HamiltonianMC(torch.optim.Optimizer):
         if closure is None:
             raise ValueError("Closure required")
         for group in self.param_groups:
+            # note: I haven't tested this with multiple parameter groups.
+            # It might be buggy or require unexpected semantics
+            # (for sure, the list of samples will need to be sliced 
+            # correctly to get the samples corresponding to each group)
             L = self.sample_L(group)
             phi = self.sample_phi(group)
             
@@ -141,6 +145,7 @@ class HamiltonianMC(torch.optim.Optimizer):
                     # give up and abort the step.  
                     self.bad_steps += 1
                     self.reject_jump(group, initial_theta)
+                    return
                 # The last step is a half-step in phi; all other steps are full.
                 self.phi_step(group, phi, half=(i == L))
             r = self.compute_r(initial_loss, loss, initial_phi, phi, group)
@@ -163,7 +168,6 @@ def run_hmc(G, parameters, num_samples, verbose=True,
     number of iterations.
     The HamiltonianMC object is returned.
     """
-    # TODO: multithread it
     hmc = HamiltonianMC(parameters, epsilon, L_max)
     def closure():
         hmc.zero_grad()
@@ -181,3 +185,15 @@ def run_hmc(G, parameters, num_samples, verbose=True,
         hmc.step(closure)
     print("Acceptance rate: {:.3f}".format(hmc.get_accept_rate()))
     return hmc
+
+def compute_ESJD(samples, L=1, penalize=True):
+    """
+    Compute the expected squared jumping distance (ESJD), optionally 
+    penalized by the square root of the number of HMC leapfrog steps L.
+    Input should be a (S x d) numpy array, with S the number of MCMC samples.
+    """
+    diff = samples[1:] - samples[:-1]
+    esjd = np.power(diff, 2).sum() / samples.shape[0]
+    if penalize:
+        return esjd / np.sqrt(L)
+    return esjd

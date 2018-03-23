@@ -88,15 +88,17 @@ class RazorDataset(torch.utils.data.Dataset):
     and returns it in binned format.
     """
 
-    def __init__(self, box, nb, num_mr_bins=100, mr_max=4000):
+    def __init__(self, box, nb, num_mr_bins=100, mr_max=4000,
+            proc='TTJets1L'):
         self.box = box
         self.nb = nb
+        self.proc = proc
 
         self.num_mr_bins = num_mr_bins
         self.mr_min = get_mr_min(box)
         self.mr_max = mr_max
 
-        unbinned = load_mrrsq_data(box, nb)
+        unbinned = load_mrrsq_data(box, nb, proc=proc)
         self.bin_centers, self.counts = self.convert_to_binned(unbinned)
 
     def convert_to_binned(self, unbinned):
@@ -141,7 +143,7 @@ def get_loader(dataset, batch_size=None, shuffle=False):
     return torch.utils.data.DataLoader(dataset, 
             batch_size=batch_size, shuffle=shuffle)
 
-def get_binned_data_1d(num_mr_bins, mr_max=2000):
+def get_binned_data_1d(num_mr_bins, mr_max=2000, proc='TTJets1L'):
     """
     Returns a dictionary containing MR-Rsq datasets for all
     boxes and b-tag categories.
@@ -154,7 +156,7 @@ def get_binned_data_1d(num_mr_bins, mr_max=2000):
     binned_data = {}
     for box in boxes:
         datasets[box] = {nb: Razor1DDataset(
-            box, nb, num_mr_bins, mr_max) for nb in nbtags[box]}
+            box, nb, num_mr_bins, mr_max, proc=proc) for nb in nbtags[box]}
         loaders[box] = {nb: get_loader(dataset) 
                 for nb, dataset in datasets[box].items()}
         binned_data[box] = {nb: iter(loader).next()

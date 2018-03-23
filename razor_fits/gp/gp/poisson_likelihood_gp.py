@@ -126,7 +126,7 @@ class PoissonLikelihoodGP(GaussianProcess):
         The prior is just a standard normal on the whitened function values g.
         """
         g = self.g
-        return -g.pow(2).sum()
+        return -0.5 * g.pow(2).sum()
 
     def neg_log_p(self):
         """
@@ -136,17 +136,20 @@ class PoissonLikelihoodGP(GaussianProcess):
         lp = self.log_prior()
         return -ll - lp
 
-    def fit(self, num_steps=25, verbose=True, lr=0.0001):
+    def fit(self, num_steps=1000, verbose=True, lr=0.0001,
+            parameters=None):
         # LBFGS does not do a good job of fitting the kernel parameters.
         # We leave them fixed and optimize the latent function values.
-        optim = torch.optim.LBFGS([self.g], lr=lr)
+        if parameters is None:
+            parameters = [self.g]
+        optim = torch.optim.LBFGS(parameters, lr=lr)
         clip = 500
         def closure():
             optim.zero_grad()
             self.clear()
             nlogp = self.neg_log_p()
             nlogp.backward()
-            torch.nn.utils.clip_grad_norm([self.g], clip)
+            torch.nn.utils.clip_grad_norm(parameters, clip)
             return nlogp
         for i in range(num_steps):
             nlogp = closure()
@@ -164,18 +167,50 @@ class PoissonLikelihoodGP(GaussianProcess):
         pass
 
     def do_hmc(self, num_samples, epsilon=None, L_max=None, 
-            print_every=200, verbose=False):
+            print_every=200, verbose=False, extra_pars=[]):
+        """
+        Runs HMC for num_samples steps with parameters epsilon, L_max.
+        By default, only the whitened function values g are sampled.
+        Additional parameters can be sampled if provided 
+        as a list in extra_pars; samples of these .
+        """
         if epsilon is None:
             epsilon = self.hmc_epsilon
         if L_max is None:
             L_max = self.hmc_L_max
-        hmc = run_hmc(self, [self.g], num_samples=(num_samples*2),
+        pars = [self.g] + extra_pars
+        hmc = run_hmc(self, pars, num_samples=(num_samples*2),
                 epsilon=epsilon, L_max=L_max, 
                 print_every=print_every, verbose=verbose)
-        # Every HMC sample is wrapped in a list.
-        # Unwrap it and take the second half of the samples
+        # Values of g are first in the list of sampled parameters.
+        # Take the second half of the sampled parameters
         # (discarding the first half as warm-up)
-        return np.asarray([s[0] for s in hmc.samples[num_samples:]])
+        g_samples = np.asarray([s[0] for s in hmc.samples[num_samples:]])
+        if extra_pars:
+            par_samples = [s[1:] for s in hmc.samples[num_samples:]]
+            return g_samples, par_samples
+        else:
+            return g_samples
+
+    def add_noise(self, f):
+        """
+        Sample data values from the function values.
+        """
+        return np.random.poisson(f)
+
+    def preds_from_samples(self, use_noise=False):
+        """
+        Converts samples of g to samples of the latent Poisson mean
+        or random draws from the Poisson mean (if use_noise is True)
+        """
+        if self.samples is None:
+            raise ValueError("Need to sample first")
+        L = self.get_L().data.numpy()
+        mean_samples = np.exp(np.matmul(
+            L, np.expand_dims(self.samples, -1))).squeeze()
+        if use_noise:
+            return self.add_noise(mean_samples)
+        return mean_samples
 
     def sample(self, v=None, num_samples=1, use_noise=False, verbose=False,
             print_every=None):
@@ -186,7 +221,7 @@ class PoissonLikelihoodGP(GaussianProcess):
         if print_every is None:
             print_every = 100
             if num_samples > 2000:
-                print_every = 500
+                print_every = 2000
         # Generate more samples if needed
         if self.samples is not None and len(self.samples) < num_samples:
             samples_needed = num_samples - len(self.samples)
@@ -196,15 +231,76 @@ class PoissonLikelihoodGP(GaussianProcess):
         elif self.samples is None:
             self.samples = self.do_hmc(num_samples, 
                     print_every=print_every, verbose=verbose)
-        # Figure out which data point we are sampling
+        samples = self.preds_from_samples(use_noise=use_noise)
         if v is not None:
+            # Figure out which data point we are sampling
             U = self.U.data
-            ind = np.where(U == v)[0][0]
-            # TODO: error check in case a non-grid point is passed
-            # or implement prediction for new data points
-            L = self.get_L().data.numpy()
-            mean_samples = np.exp(np.matmul(
-                L, np.expand_dims(self.samples, -1))[:, ind]).flatten() 
-            if use_noise:
-                return np.random.poisson(mean_samples)
-            return mean_samples
+            try:
+                ind = np.where(U == v)[0][0]
+            except IndexError:
+                raise ValueError(
+                        "Sampling location must be one of the input points")
+            samples = samples[:, ind]
+        return samples
+
+
+class PoissonGPWithSignal(PoissonLikelihoodGP):
+    """
+    Poisson likelihood GP with a variable-strength signal included.
+    Attributes: 
+        S: expected signal counts at theoretical cross section
+        log_signal: signal strength relative to theoretical cross section
+    """
+
+    def __init__(self, kernel, U, Y, S, mean=None,
+            hmc_epsilon=0.0001, hmc_L_max=10):
+        super(PoissonGPWithSignal, self).__init__(kernel, U, Y, mean,
+                hmc_epsilon, hmc_L_max)
+
+        self.S = Variable(S)
+        self.log_signal = make_log_par(1.0)
+
+    def log_likelihood(self):
+        Y = self.Y
+        b = self.get_f().exp()
+        s = self.log_signal.exp() * self.S
+        mean = s + b
+        return (Y * mean.log() - mean).sum()
+
+    def fit(self, num_steps=1000, verbose=False, lr=0.0001,
+            parameters=None):
+        if parameters is None:
+            parameters = [self.g, self.log_signal]
+        super(PoissonGPWithSignal, self).fit(num_steps, verbose=verbose,
+                lr=lr, parameters=parameters)
+
+    def preds_from_samples(self, use_noise=False):
+        bs = super(PoissonGPWithSignal, self).preds_from_samples(
+                use_noise=False)
+        sig_shape = self.S.data.numpy()
+        ss = np.asarray([np.exp(s[0]) * sig_shape 
+            for s in self.log_signal_samples])
+        mean_samples = bs + ss
+        if use_noise:
+            return self.add_noise(mean_samples)
+        return mean_samples
+
+    def sample(self, num_samples=1, use_noise=False, verbose=False):
+        """
+        Currently this samples the observed data locations using HMC.
+        Predicting non-data locations is not supported yet.
+        """
+        print_every = 100
+        if num_samples > 2000:
+            print_every = 2000
+        self.samples, self.log_signal_samples = self.do_hmc(num_samples, 
+                extra_pars=[self.log_signal],
+                print_every=print_every, verbose=verbose)
+
+        return self.preds_from_samples(use_noise=use_noise)
+
+        # placeholder: give predicted means
+        #self.samples = np.expand_dims(self.g.data.numpy(), 0)
+        #s = np.expand_dims((self.log_signal.exp() * self.S).data.numpy(), 0)
+        #means = self.preds_from_samples() + s
+        #return means

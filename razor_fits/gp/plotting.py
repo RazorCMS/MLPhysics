@@ -16,9 +16,11 @@ def compute_nsigma(y, samples):
     with respect to the simulated samples and converts
     it into a number of sigma.
     """
-    samples = np.asarray(samples).T
+    if not isinstance(samples, np.ndarray):
+        # assume it's been created by GaussianProcess.sample
+        samples = np.asarray(samples).T
     num_samples = samples.shape[0]
-    p = (samples < y).sum(0) / num_samples
+    p = (samples <= y).sum(0) / num_samples
     return stats.norm.ppf(p)
 
 def gauss(x, *p):
@@ -47,31 +49,44 @@ def gauss_fit(bin_centers, counts):
 
 ### PLOTTING FUNCTIONS
 
-def plot_hist_1d(binned, log=True, G=None, title=None,
+def plot_hist_1d(binned=None, U=None, Y=None, S=None, 
+        log=True, G=None, samples=None, title=None,
         num_samples=4000, use_noise=False, verbose=False):
     """
-    Input: binned data loaded by Razor1DDataset class.
+    Input: binned data loaded by Razor1DDataset class
+        OR torch Tensors U and Y
     Optionally provide a Gaussian Process object, G, with a 
     sample() method, which will produce a prediction
     to overlay on the data.
+    Alternatively, provide a list of samples directly.
+    Optionally provide a signal shape to superimpose on the plot.
     """
+    if binned is None: # make our binned dataset out of U and Y
+        binned = {'u':U, 'y':Y}
     centers = binned['u'].numpy()
     counts = binned['y'].numpy()
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    if G is not None:
+    if G is not None or samples is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
-        samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
-            use_noise=use_noise) for x in binned['u']]
-        bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
+        if samples is None:
+            samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
+                use_noise=use_noise) for x in binned['u']]
+            bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
+        else:
+            bands = {q:np.percentile(samples, q, axis=0) for q in quantiles}
         plt.fill_between(centers, bands[2.5], bands[97.5], 
                 facecolor='b', alpha=0.35)
         plt.fill_between(centers, bands[16], bands[84], 
                 facecolor='b', alpha=0.5)
-        plt.plot(centers, bands[50], color='b')
+        plt.plot(centers, bands[50], color='b', label='GP Fit')
     
-    ax.plot(centers, counts, 'ko') 
+    if S is not None:
+        signal = S.numpy()
+        ax.plot(centers, signal, 'r', linewidth=1.5, label='Signal')
+    ax.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
+            label='Data') 
     ax.tick_params(labelsize=14)
     plt.xlabel('MR', fontsize=16)
     plt.ylabel('Counts', fontsize=16)
@@ -80,15 +95,17 @@ def plot_hist_1d(binned, log=True, G=None, title=None,
     if log:
         plt.yscale('log')
     plt.ylim(ymin=0.1)
+    plt.legend()
 
     plt.show()
 
-def plot_nsigma_1d(binned, G, num_samples=40000,
+def plot_nsigma_1d(binned, G=None, samples=None, num_samples=40000,
         use_poisson_noise=False, verbose=False):
     """
     Inputs:
         binned: dataset loaded by Razor1DDataset or Razor2DDataset
         G: Gaussian Process object with a sample() method.
+        samples: directly provide a list of samples 
         num_samples: number of samples to draw for each nsigma computation
         use_poisson_noise: only set to True if approximating Poisson noise
             using the observed data counts (for Gaussian GP likelihood)
@@ -96,14 +113,15 @@ def plot_nsigma_1d(binned, G, num_samples=40000,
     """
     centers = binned['u']
     counts = binned['y'].numpy()
-    if use_poisson_noise:
-        samples = [G.sample(x, num_samples=num_samples, 
-            use_noise=True, verbose=verbose,
-            poisson_noise_vector=torch.Tensor([float(counts[i])])) 
-            for i, x in enumerate(centers)]
-    else:
-        samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
-            use_noise=True) for x in centers]
+    if samples is None:
+        if use_poisson_noise:
+            samples = [G.sample(x, num_samples=num_samples, 
+                use_noise=True, verbose=verbose,
+                poisson_noise_vector=torch.Tensor([float(counts[i])])) 
+                for i, x in enumerate(centers)]
+        else:
+            samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
+                use_noise=True) for x in centers]
     nsigma = compute_nsigma(counts, samples)
     if np.isinf(nsigma).any():
         print("Error: at least one nsigma is infinite")
