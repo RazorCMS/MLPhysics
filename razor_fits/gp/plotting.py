@@ -3,6 +3,7 @@ import scipy.stats as stats
 import scipy.optimize as optimize
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib import gridspec
 import seaborn as sns
 import torch
 
@@ -20,7 +21,7 @@ def compute_nsigma(y, samples):
         # assume it's been created by GaussianProcess.sample
         samples = np.asarray(samples).T
     num_samples = samples.shape[0]
-    p = (samples <= y).sum(0) / num_samples
+    p = (samples < y).sum(0) / num_samples
     return stats.norm.ppf(p)
 
 def gauss(x, *p):
@@ -65,22 +66,25 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     if binned is None: # make our binned dataset out of U and Y
         binned = {'u':U, 'y':Y}
     centers = binned['u'].numpy()
+    bin_width = centers[1] - centers[0]
+    edges = centers - bin_width / 2
     counts = binned['y'].numpy()
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig = plt.figure(figsize=(8, 8))
+    gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1]) 
+    ax0 = plt.subplot(gs[0, 0])
+    ax1 = plt.subplot(gs[1, 0])
 
     # Shaded signal shape histogram
     if S is not None:
         signal = S.numpy()
-        bin_width = centers[1] - centers[0]
-        edges = centers - bin_width / 2
-        ax.bar(edges, signal, width=bin_width, 
+        ax0.bar(edges, signal, width=bin_width, align='edge',
                 linewidth=0, label='Signal', facecolor='darkred', alpha=0.35)
 
     # Best fit with fitted signal prediction included
     if samples_withsignal is not None:
         best_fit = np.percentile(samples_withsignal, 50, axis=0)
-        plt.plot(centers, best_fit, color='forestgreen', alpha=0.8, linewidth=3,
+        ax0.plot(centers, best_fit, color='forestgreen', alpha=0.8, linewidth=3,
                 label='GP + Signal Fit')
 
     # Best fit and +/- 1, 2 sigma bands
@@ -92,25 +96,43 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
             bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
         else:
             bands = {q:np.percentile(samples, q, axis=0) for q in quantiles}
-        plt.fill_between(centers, bands[2.5], bands[97.5], 
+        ax0.fill_between(centers, bands[2.5], bands[97.5], 
                 facecolor='b', alpha=0.35)
-        plt.fill_between(centers, bands[16], bands[84], 
+        ax0.fill_between(centers, bands[16], bands[84], 
                 facecolor='b', alpha=0.5)
-        plt.plot(centers, bands[50], color='b', label='GP Fit', linewidth=1.5)
+        ax0.plot(centers, bands[50], color='b', label='GP Fit', linewidth=1.5)
+        if samples_withsignal is not None:
+            samples_withnoise = np.random.poisson(samples_withsignal)
+        else:
+            samples_withnoise = np.random.poisson(samples)
+        nsigma = compute_nsigma(counts, samples_withnoise)
+        ax1.bar(edges, nsigma, bin_width, align='edge', color='b',
+                edgecolor='k')
+        ax1.set_xlabel('MR (GeV)', fontsize=16)
+        ax1.set_ylabel('Significance', fontsize=16)
+        ax1.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
+        ax1.set_ylim(ymin=-3.0, ymax=3.0)
+        ax1.set_yticks(np.arange(-3, 4))
+        ax1.tick_params(labelsize=14)
+        ax1.set_axisbelow(True)
+        ax1.yaxis.grid()
+        plt.tight_layout()
+    else:
+        ax0.set_xlabel('MR (GeV)', fontsize=16)
     
     # Data counts
-    ax.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
-            label='Data') 
+    ax0.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
+            label='Data')
 
-    ax.tick_params(labelsize=14)
-    plt.xlabel('MR', fontsize=16)
-    plt.ylabel('Counts', fontsize=16)
+    ax0.tick_params(labelsize=14)
+    ax0.set_ylabel('Counts', fontsize=16)
     if title is not None:
-        plt.title(title, fontsize=16)
+        ax0.set_title(title, fontsize=16)
     if log:
-        plt.yscale('log')
-    plt.ylim(ymin=0.1)
-    plt.legend(fontsize=14)
+        ax0.set_yscale('log')
+    ax0.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
+    ax0.set_ylim(ymin=0.1)
+    ax0.legend(fontsize=14)
 
     plt.show()
 

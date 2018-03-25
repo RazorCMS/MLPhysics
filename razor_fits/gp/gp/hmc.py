@@ -11,11 +11,16 @@ class HamiltonianMC(torch.optim.Optimizer):
             At each iteration, a number of steps L is drawn uniformly
             between 1 and L_max.
         samples: list of sampled parameter points
+        abort_on_error: give up if Torch throws a runtime error.
+            (usually they are overflows from large gradients
+             when dealing with sharply peaked likelihoods)
     """
 
-    def __init__(self, params, epsilon=0.1, L_max=10, M=1.):
+    def __init__(self, params, epsilon=0.1, L_max=10, M=1.,
+            abort_on_error=False):
         defaults = dict(epsilon=epsilon, L_max=L_max, M=M)
         super(HamiltonianMC, self).__init__(params, defaults)
+        self.abort_on_error = abort_on_error
         self.samples = []
         self.accepted_steps = 0
         self.rejected_steps = 0
@@ -73,6 +78,8 @@ class HamiltonianMC(torch.optim.Optimizer):
                 # It will only happen for the final phi value (the initial
                 # value will not be this large).  Treat this as p(phi) = 0
                 # and therefore r = 0.
+                if self.abort_on_error:
+                    raise
                 return 0
         log_p_phi = log_p_phi / M
         # initial_loss and final_loss are negative log p
@@ -131,6 +138,8 @@ class HamiltonianMC(torch.optim.Optimizer):
                 print(
                     "The loss function threw an error on the first evaluation"
                     " -- aborting.")
+                if self.abort_on_error:
+                    raise
                 self.bad_steps += 1
                 self.reject_jump(group, initial_theta)
                 return
@@ -143,6 +152,8 @@ class HamiltonianMC(torch.optim.Optimizer):
                     # Errors in the loss calculation are caused by overflows
                     # due to very large gradients.  If we encounter this,
                     # give up and abort the step.  
+                    if self.abort_on_error:
+                        raise
                     self.bad_steps += 1
                     self.reject_jump(group, initial_theta)
                     return
@@ -160,7 +171,8 @@ class HamiltonianMC(torch.optim.Optimizer):
 
 
 def run_hmc(G, parameters, num_samples, verbose=True, 
-        epsilon=0.1, L_max=10, print_every=10):
+        epsilon=0.1, L_max=10, print_every=10, 
+        abort_on_error=False):
     """
     First, the GP model is fit to obtain a reasonable estimate of the 
     parameter values. The learning rate specified by lr is used.
@@ -168,7 +180,8 @@ def run_hmc(G, parameters, num_samples, verbose=True,
     number of iterations.
     The HamiltonianMC object is returned.
     """
-    hmc = HamiltonianMC(parameters, epsilon, L_max)
+    hmc = HamiltonianMC(parameters, epsilon, L_max,
+            abort_on_error=abort_on_error)
     def closure():
         hmc.zero_grad()
         G.clear()

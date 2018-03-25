@@ -169,7 +169,8 @@ class PoissonLikelihoodGP(GaussianProcess):
         pass
 
     def do_hmc(self, num_samples, epsilon=None, L_max=None, 
-            print_every=200, verbose=False, extra_pars=[]):
+            print_every=200, verbose=False, extra_pars=[],
+            abort_on_error=False):
         """
         Runs HMC for num_samples steps with parameters epsilon, L_max.
         By default, only the whitened function values g are sampled.
@@ -183,7 +184,8 @@ class PoissonLikelihoodGP(GaussianProcess):
         pars = [self.g] + extra_pars
         hmc = run_hmc(self, pars, num_samples=(num_samples*2),
                 epsilon=epsilon, L_max=L_max, 
-                print_every=print_every, verbose=verbose)
+                print_every=print_every, verbose=verbose,
+                abort_on_error=abort_on_error)
         # Values of g are first in the list of sampled parameters.
         # Take the second half of the sampled parameters
         # (discarding the first half as warm-up)
@@ -215,7 +217,7 @@ class PoissonLikelihoodGP(GaussianProcess):
         return mean_samples
 
     def sample(self, v=None, num_samples=1, use_noise=False, verbose=False,
-            print_every=None):
+            print_every=None, abort_on_error=False):
         """
         Currently this samples the observed data locations using HMC.
         Predicting non-data locations is not supported yet.
@@ -228,10 +230,12 @@ class PoissonLikelihoodGP(GaussianProcess):
         if self.samples is not None and len(self.samples) < num_samples:
             samples_needed = num_samples - len(self.samples)
             samples = self.do_hmc(samples_needed, 
+                    abort_on_error=abort_on_error,
                     print_every=print_every, verbose=verbose)
             self.samples = np.concatenate((self.samples, samples))
         elif self.samples is None:
             self.samples = self.do_hmc(num_samples, 
+                    abort_on_error=abort_on_error,
                     print_every=print_every, verbose=verbose)
         samples = self.preds_from_samples(use_noise=use_noise)
         if v is not None:
@@ -288,7 +292,8 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
             return self.add_noise(mean_samples)
         return mean_samples
 
-    def sample(self, num_samples=1, use_noise=False, verbose=False):
+    def sample(self, num_samples=1, use_noise=False, verbose=False,
+            abort_on_error=False):
         """
         Currently this samples the observed data locations using HMC.
         Predicting non-data locations is not supported yet.
@@ -297,7 +302,7 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
         if num_samples > 2000:
             print_every = 2000
         self.samples, self.log_signal_samples = self.do_hmc(num_samples, 
-                extra_pars=[self.log_signal],
+                extra_pars=[self.log_signal], abort_on_error=abort_on_error,
                 print_every=print_every, verbose=verbose)
 
         return self.preds_from_samples(use_noise=use_noise)

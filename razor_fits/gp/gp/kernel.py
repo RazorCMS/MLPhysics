@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
-def make_log_par(par):
+def make_log_par(par, fixed=False):
     """
     Input: float or numpy array
     Output: torch Parameter representing the log of the input.
@@ -12,7 +12,9 @@ def make_log_par(par):
         iter(par)
     except TypeError:
         par = [par]
-    return torch.nn.Parameter(torch.Tensor(np.log(par)))
+    requires_grad = not fixed
+    return torch.nn.Parameter(torch.Tensor(np.log(par)), 
+            requires_grad=requires_grad)
 
 
 class Kernel(torch.nn.Module):
@@ -20,10 +22,15 @@ class Kernel(torch.nn.Module):
     Base class for GP kernels.
     Derived classes should implement the forward() function that
     specifies how the kernel operates on two input vectors.
+    If this.fixed is True, kernel parameters will not be trainable.
     """
 
-    def __init__(self):
+    def __init__(self, fixed=False):
         super(Kernel, self).__init__()
+        self.fixed = fixed
+
+    def make_log_par(self, par):
+        return make_log_par(par, fixed=self.fixed) 
 
     def expand_inputs(self, U, V):
         """
@@ -65,13 +72,13 @@ class SquaredExponentialKernel(Kernel):
         alpha (positive float): 
     """
 
-    def __init__(self, ell, alpha):
+    def __init__(self, ell, alpha, fixed=False):
         assert ell > 0, "ell must be positive"
         assert alpha > 0, "alpha must be positive"
-        super(SquaredExponentialKernel, self).__init__()
+        super(SquaredExponentialKernel, self).__init__(fixed)
 
-        self.log_ell = make_log_par(ell)
-        self.log_alpha = make_log_par(alpha)
+        self.log_ell = self.make_log_par(ell)
+        self.log_alpha = self.make_log_par(alpha)
 
     def forward(self, U, V):
         assert (len(U.size()) < 3 and len(V.size()) < 3), (
@@ -94,11 +101,11 @@ class ConstantKernel(Kernel):
     Kernel giving constant correlation strength A for all inputs.
     """
     
-    def __init__(self, A):
+    def __init__(self, A, fixed=False):
         assert A > 0, "A must be positive"
-        super(ConstantKernel, self).__init__()
+        super(ConstantKernel, self).__init__(fixed)
 
-        self.log_A = make_log_par(A)
+        self.log_A = self.make_log_par(A)
 
     def forward(self, U, V):
         return torch.exp(self.log_A)
@@ -112,11 +119,11 @@ class ExponentialDecayKernel(Kernel):
     and is not optimized during fitting.
     """
     
-    def __init__(self, a, offset=650):
+    def __init__(self, a, offset=650, fixed=False):
         assert a > 0, "a must be positive"
-        super(ExponentialDecayKernel, self).__init__()
+        super(ExponentialDecayKernel, self).__init__(fixed)
 
-        self.log_a = make_log_par(a)
+        self.log_a = self.make_log_par(a)
         self.offset = Variable(torch.Tensor([offset]))
 
     def forward(self, U, V):
@@ -134,10 +141,10 @@ class GibbsKernel(Kernel):
     (to be defined in subclasses).
     """
     
-    def __init__(self, alpha):
-        super(GibbsKernel, self).__init__()
+    def __init__(self, alpha, fixed=False):
+        super(GibbsKernel, self).__init__(fixed)
 
-        self.log_alpha = make_log_par(alpha)
+        self.log_alpha = self.make_log_par(alpha)
 
     def l(self, x):
         raise NotImplementedError(
@@ -163,11 +170,11 @@ class LinearGibbsKernel(GibbsKernel):
     l(x) = bx + c.
     """
 
-    def __init__(self, alpha, b, c):
-        super(LinearGibbsKernel, self).__init__(alpha)
+    def __init__(self, alpha, b, c, fixed=False):
+        super(LinearGibbsKernel, self).__init__(alpha, fixed=fixed)
 
-        self.log_b = make_log_par(b)
-        self.log_c = make_log_par(c)
+        self.log_b = self.make_log_par(b)
+        self.log_c = self.make_log_par(c)
 
     def l(self, x):
         # TODO: handle multidimensional b, c
@@ -183,11 +190,11 @@ class PhysicsInspiredKernel(Kernel):
         2) a linear Gibbs kernel (parameters A, b, c)
     """
 
-    def __init__(self, A, a, b, c):
-        super(PhysicsInspiredKernel, self).__init__()
+    def __init__(self, A, a, b, c, fixed=False):
+        super(PhysicsInspiredKernel, self).__init__(fixed)
 
-        self.exp_kernel = ExponentialDecayKernel(a)
-        self.linear_kernel = LinearGibbsKernel(A, b, c)
+        self.exp_kernel = ExponentialDecayKernel(a, fixed=fixed)
+        self.linear_kernel = LinearGibbsKernel(A, b, c, fixed=fixed)
 
     @property
     def log_a(self):return self.exp_kernel.log_a

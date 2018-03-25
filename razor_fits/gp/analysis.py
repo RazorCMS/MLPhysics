@@ -35,8 +35,6 @@ def _do_sample(seed, box, btags, num_mr_bins, mr_max, k_ell, k_alpha,
         print("Seed {} done".format(seed))
     return samples
 
-### This function runs the current best performing GP model 
-### on a given analysis box.
 def fit(
         box, btags,                                     # analysis region
         num_mr_bins, mr_max,                            # fit range 
@@ -45,6 +43,10 @@ def fit(
         hmc_epsilon=0.0001, hmc_L_max=10, chains=1,     # HMC parameters
         num_samples=40000, verbose=False, best_g=None,
         return_g=False): # specify return_g=True to return best value of g
+    """
+    Fits the GP model (with no signal) on the chosen analysis box
+    and returns samples from the GP posterior.
+    """
     if best_g is None:
         # perform initial fit
         data = get_data(box, btags, num_mr_bins, mr_max)
@@ -81,13 +83,53 @@ def fit(
         print("Total time: {}".format(t1 - t0))
         return np.concatenate(results)
 
+def fit_signal(
+        box, btags, sms,                                # analysis region
+        num_mr_bins, mr_max,                            # fit range
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        steps=1000, lr=0.001,                           # fit parameters
+        hmc_epsilon=0.0001, hmc_L_max=10,               # HMC parameters
+        num_samples=40000, 
+        mu_true=1.0,                                    # signal strength
+        best_pars=None, return_pars=False,                    
+        verbose=False): 
+    """
+    Performs a signal + background fit using a fixed signal shape.
+    Samples from the GP posterior and returns the GP object.
+    Access the samples via G.preds_from_samples().
+    (note: gave up on multiprocessing for now.)
+    """
+    data = get_data(box, btags, num_mr_bins, mr_max)
+    data_sig = get_data(box, btags, num_mr_bins, mr_max, 
+                             proc=sms)
+    U = data['u']
+    Y = data['y']
+    # inject signal into the data
+    S_mean = data_sig['y']
+    Y = Y + torch.Tensor(np.random.poisson(S_mean.numpy() * mu_true))
+    
+    kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
+    G = gp.PoissonGPWithSignal(kernel, U, Y, S_mean,
+            hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max)
+    if best_pars is None:
+        G.fit(num_steps=steps, lr=lr, verbose=verbose)
+        best_pars = (G.g.data, G.log_signal.data)
+        if return_pars:
+            return best_pars
+    G.g = torch.nn.Parameter(best_pars[0].clone())
+    G.log_signal = torch.nn.Parameter(best_pars[1].clone())
+    G.sample(num_samples, verbose=True)
+
+    return G
+
 def bayes_opt(
         box, btags,                                     # analysis region
         num_mr_bins, mr_max,                            # fit range 
         k_ell=200, k_alpha=200,                         # kernel parameters
-        steps=25, lr=0.001,                             # fit parameters
-        num_samples=4000, verbose=True,
-        iterations=40):
+        steps=1000, lr=0.001,                           # fit parameters
+        num_samples=500, verbose=True,
+        iterations=40, penalize_L=True,
+        sms=None, mu_true=None):                        # optional signal
     """
     Performs Bayesian optimization of the tunable HMC parameters
     using the skopt package.  
@@ -95,13 +137,18 @@ def bayes_opt(
     (ESJD), which is the average squared distance traveled in each iteration.
     """
     import skopt
-    print("Performing initial model fit")
-    best_g = fit(box, btags, num_mr_bins, mr_max,
-            k_ell, k_alpha, steps, lr, verbose=verbose, return_g=True)
     params = [
             (-11., -4.), # log(epsilon)
             (1, 30), # L_max
             ]
+    print("Performing initial model fit")
+    if sms is None:
+        best_g = fit(box, btags, num_mr_bins, mr_max,
+                k_ell, k_alpha, steps, lr, verbose=verbose, return_g=True)
+    else:
+        best_g, best_log_signal = fit_signal(box, btags, sms,
+                num_mr_bins, mr_max, k_ell, k_alpha, steps, lr,
+                mu_true=mu_true, return_pars=True, verbose=verbose)
     optimizer = skopt.Optimizer(params)
     for i in range(iterations):
         next_params = optimizer.ask()
@@ -109,14 +156,22 @@ def bayes_opt(
         if verbose:
             print("Beginning step {}: {:.2f} {}".format(i, 
                 next_log_epsilon, next_L_max))
-        samples = fit(box, btags, num_mr_bins, mr_max,
-                k_ell, k_alpha, steps, lr, 
-                float(np.exp(next_log_epsilon)), next_L_max,
-                chains=1, num_samples=num_samples, verbose=verbose,
-                best_g=best_g.clone())
-        esjd = gp.compute_ESJD(samples, next_L_max)
+        if sms is None:
+            samples = fit(box, btags, num_mr_bins, mr_max,
+                    k_ell, k_alpha, steps, lr, 
+                    float(np.exp(next_log_epsilon)), next_L_max,
+                    chains=1, num_samples=num_samples, verbose=verbose,
+                    best_g=best_g.clone())
+        else:   
+            G = fit_signal(box, btags, sms, num_mr_bins, mr_max,
+                    k_ell, k_alpha, steps, lr, 
+                    float(np.exp(next_log_epsilon)), next_L_max,
+                    num_samples=num_samples, mu_true=mu_true,
+                    best_pars=(best_g, best_log_signal), verbose=verbose)
+            samples = G.samples
+        esjd = gp.compute_ESJD(samples, next_L_max, penalize=penalize_L)
         if esjd > 0:
-            metric = -np.log(gp.compute_ESJD(samples, next_L_max))
+            metric = -np.log(esjd)
         else:
             # -log is infinity
             metric = 9999
@@ -128,6 +183,31 @@ def bayes_opt(
             print("New best parameter estimate: {}".format(best_params))
     print("Best HMC parameter estimate: {}".format(best_params))
     return best_params
+
+def run(box, btags, sms,                                # analysis region
+        num_mr_bins, mr_max,                            # fit range 
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        steps=1000, lr=0.001,                           # fit parameters
+        num_opt_samples=500, 
+        opt_iterations=40, penalize_L=True,
+        mu_true=1.0, num_samples=160000,
+        verbose=True): 
+    print("Will first run Bayesian optimization "
+          "on the HMC hyperparameters")
+    best_hmc_log_epsilon, best_hmc_L_max = bayes_opt(
+            box, btags, num_mr_bins, mr_max,
+            k_ell, k_alpha, steps, lr,
+            num_opt_samples, verbose, 
+            opt_iterations, penalize_L,
+            sms, mu_true)
+    best_hmc_epsilon = float(np.exp(best_hmc_log_epsilon))
+    print("Will do final run of {} samples "
+          "with epsilon = {}, L_max = {}".format
+          (best_hmc_epsilon, best_hmc_L_max))
+    return fit_signal(box, btags, sms,
+            num_mr_bins, mr_max, k_ell, k_alpha, steps, lr, 
+            best_hmc_epsilon, best_hmc_L_max,
+            num_samples, mu_true, verbose=verbose)
 
 def make_parser():
     parser = argparse.ArgumentParser()
@@ -141,6 +221,7 @@ def make_parser():
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--samples', type=int, default=500)
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--no-penalize', action='store_true')
     return parser
 
 
@@ -152,4 +233,4 @@ if __name__ == '__main__':
     result = bayes_opt(
         a.box, a.btags, a.num_mr_bins, a.mr_max,                           
         a.k_ell, a.k_alpha, a.steps, a.lr,                            
-        a.samples, verbose=True)
+        a.samples, verbose=True, penalize_L=(not a.no_penalize))
