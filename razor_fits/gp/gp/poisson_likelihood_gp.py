@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from .gaussian_process import GaussianProcess
 from .kernel import make_log_par
 from .hmc import run_hmc
+from .annealing import run_annealing
 
 class PoissonLikelihoodGP(GaussianProcess):
     """
@@ -160,13 +161,56 @@ class PoissonLikelihoodGP(GaussianProcess):
                 print("Iteration {} of {}".format(i, num_steps))
         self.clear()
 
+    def predict_mean(self, V):
+        if self.samples is None:
+            raise RuntimeError("Please sample before predicting")
+        U = self.U
+        L = self.get_L()
+        mu_V = self.mean(V)
+        K_UV = self.kernel.forward(U, V)
+        A = self.lsolve(L, K_UV)
+
+        # multiply by Cholesky to get log(Poisson mean) for each sample
+        f = torch.matmul(L, 
+                Variable(torch.Tensor(self.samples)).unsqueeze(-1)).squeeze()
+        means = []
+        for i in range(f.size(0)):
+            # get the predicted mean from each available sample
+            d = f[i] - self.mean(U)
+            alpha = self.lsolve(L, d)
+
+            # the second term is K_VU K^-1 d
+            # which equals (L^-1 K_UV)^T (L^-1 d)
+            means.append((mu_V + torch.mm(A.t(), alpha))[:, 0])
+        return means
+
+    def predict_K(self, V):
+        U = self.U
+        L = self.get_L()
+
+        K_VV = self.kernel.forward(V, V)
+        K_UV = self.kernel.forward(U, V)
+        A = self.lsolve(L, K_UV)
+
+        # the second term is K_VU K^-1 K_UV
+        # which equals (L^-1 K_UV)^T (L^-1 K_UV)
+        return K_VV - torch.mm(A.t(), A)
+
     def predict(self, V):
         """
-        Gets the predicted mean of the GP for new inputs V.
+        Gets the predicted mean and covariance of the GP for new inputs V.
         """
         V = Variable(V)
-        # TODO
-        pass
+        pred_var = np.asarray([self.predict_K(
+            Variable(
+                torch.Tensor([float(v)]))).data.numpy() for v in V]).flatten()
+        pred_means = self.predict_mean(V)
+        # smear predicted means by predicted standard deviations
+        preds = []
+        for sample in pred_means:
+            deltas = np.random.normal(size=pred_var.shape[0]) * pred_var
+            preds.append(np.exp(sample.data.numpy() + deltas))
+        return np.asarray(preds)
 
     def do_hmc(self, num_samples, epsilon=None, L_max=None, 
             print_every=200, verbose=False, extra_pars=[],
@@ -255,28 +299,32 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
     Poisson likelihood GP with a variable-strength signal included.
     Attributes: 
         S: expected signal counts at theoretical cross section
-        log_signal: signal strength relative to theoretical cross section
+        signal: signal strength relative to theoretical cross section
+        num_true_signal: number of signal events actually injected
     """
 
     def __init__(self, kernel, U, Y, S, mean=None,
-            hmc_epsilon=0.0001, hmc_L_max=10):
+            hmc_epsilon=0.0001, hmc_L_max=10, num_true_signal=None):
         super(PoissonGPWithSignal, self).__init__(kernel, U, Y, mean,
                 hmc_epsilon, hmc_L_max)
 
         self.S = Variable(S)
-        self.log_signal = make_log_par(1.0)
+        self.signal = torch.nn.Parameter(torch.Tensor([5.0]))
+        self.num_true_signal = num_true_signal
 
-    def log_likelihood(self):
+    def log_likelihood(self, include_signal=True):
         Y = self.Y
-        b = self.get_f().exp()
-        s = self.log_signal.exp() * self.S
-        mean = s + b
+        mean = self.get_f().exp()
+        if include_signal:
+            s = self.signal * self.S
+            mean = mean + s
+            mean = torch.max(mean, Variable(torch.Tensor([1e-9]))) # force > 0
         return (Y * mean.log() - mean).sum()
 
     def fit(self, num_steps=1000, verbose=False, lr=0.0001,
             parameters=None):
         if parameters is None:
-            parameters = [self.g, self.log_signal]
+            parameters = [self.g, self.signal]
         super(PoissonGPWithSignal, self).fit(num_steps, verbose=verbose,
                 lr=lr, parameters=parameters)
 
@@ -285,9 +333,9 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
                 use_noise=False)
         if include_signal:
             sig_shape = self.S.data.numpy()
-            ss = np.asarray([np.exp(s[0]) * sig_shape 
-                for s in self.log_signal_samples])
-            mean_samples = mean_samples + ss
+            ss = np.asarray([s[0] * sig_shape 
+                for s in self.signal_samples])
+            mean_samples = np.maximum(mean_samples + ss, 1e-9)
         if use_noise:
             return self.add_noise(mean_samples)
         return mean_samples
@@ -295,14 +343,87 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
     def sample(self, num_samples=1, use_noise=False, verbose=False,
             abort_on_error=False):
         """
-        Currently this samples the observed data locations using HMC.
-        Predicting non-data locations is not supported yet.
+        This samples the observed data locations using HMC.
+        Use predict() to get predictions for other input locations.
         """
         print_every = 100
         if num_samples > 2000:
             print_every = 2000
-        self.samples, self.log_signal_samples = self.do_hmc(num_samples, 
-                extra_pars=[self.log_signal], abort_on_error=abort_on_error,
+        self.samples, self.signal_samples = self.do_hmc(num_samples, 
+                extra_pars=[self.signal], abort_on_error=abort_on_error,
                 print_every=print_every, verbose=verbose)
 
         return self.preds_from_samples(use_noise=use_noise)
+
+
+class AnnealingPoissonGP(PoissonGPWithSignal):
+    """
+    Poisson likelihood GP with inference performed with
+    Annealed Importance Sampling to estimate the marginal likelihood.
+    We take the signal strength to be fixed and compute the Bayes factor
+    for the signal + background hypothesis (ignoring prior model probabilities)
+    with respect to the background-only hypothesis.
+    """
+
+    def __init__(self, kernel, U, Y, S, mean=None, mu=1.0, 
+            hmc_epsilon=0.0001, hmc_L_max=10, num_true_signal=None):
+        super(AnnealingPoissonGP, self).__init__(kernel, U, Y, S, mean,
+                hmc_epsilon, hmc_L_max, num_true_signal)
+
+        # fix the signal at the specified value
+        self.signal = torch.nn.Parameter(torch.Tensor([mu]), 
+                requires_grad=False)
+        # this will hold sample importance weights
+        self.importances = []
+        # this will keep track of the number of samples per annealing run
+        self.sample_multiplier = None
+
+    def neg_log_p(self, beta=1.0):
+        """
+        This function has an extra parameter beta that is used 
+        in the annealing algorithm.  beta = 1 corresponds to the 
+        true log likelihood, and beta = 0 corresponds to the prior.
+        """
+        ll = self.log_likelihood()
+        lp = self.log_prior()
+        return -beta * ll - lp
+
+    def preds_from_samples(self, use_noise=False, include_signal=False):
+        # create dummy signal strength samples
+        self.signal_samples = [self.signal.data.numpy() 
+                for _ in range(self.samples.shape[0])]
+        samples =  super(AnnealingPoissonGP, self).preds_from_samples(
+                use_noise=use_noise, include_signal=include_signal)
+        return samples, self.importances
+
+    def sample_prior(self):
+        # The prior is a standard normal for the parameters g.
+        return [Variable(torch.randn(self.g.size(0)))]
+
+    def sample(self, num_runs=1, num_hmc_samples=1, num_beta=100,
+            verbose=False, abort_on_error=False, print_every=1):
+        """
+        Runs the annealing procedure num_runs times.  Each run
+        begins with a sample from the prior and ends with a sample
+        from the posterior and its importance weight.  
+        If num_hmc_samples > 1, the sampled point is used as the 
+        beginning point for a standard HMC run of num_hmc_samples steps.
+        """
+        annealer = run_annealing(self, [self.g], num_runs, num_hmc_samples,
+                num_beta, epsilon=self.hmc_epsilon, L_max=self.hmc_L_max,
+                verbose=verbose, print_every=print_every, 
+                abort_on_error=abort_on_error)
+        # we don't have to throw any samples away as warm-up with this algo
+        self.samples = np.asarray([s[0] for s in annealer.samples])
+        self.importances = np.asarray(annealer.importances)
+        self.sample_multiplier = num_hmc_samples
+        return self.preds_from_samples()
+
+    def get_marginal_likelihood(self):
+        """
+        Note: returns estimated marginal likelihood only up to a multiplicative
+        constant (useful for computing Bayes factors)
+        """
+        mean = self.importances.mean()
+        std = np.std(self.importances) / np.sqrt(self.importances.shape[0])
+        return mean, std

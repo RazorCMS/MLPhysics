@@ -24,6 +24,12 @@ class GaussianProcess(torch.nn.Module):
             mean = torch.zeros_like
         self.mean = mean
 
+    def lsolve(self, A, B):
+        """
+        Computes the solution X to AX = B.
+        """
+        return torch.gesv(B, A)[0]
+
     def neg_log_p(self):
         """Returns the negative log marginal likelihood of the observed data."""
         raise NotImplementedError(

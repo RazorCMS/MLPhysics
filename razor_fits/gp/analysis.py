@@ -1,10 +1,12 @@
 import argparse
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 import torch.multiprocessing as mp
 
 import razor_data
+import plotting
 import gp
 
 def get_data(box, btags, num_mr_bins, mr_max, proc='TTJets1L'):
@@ -106,19 +108,21 @@ def fit_signal(
     Y = data['y']
     # inject signal into the data
     S_mean = data_sig['y']
-    Y = Y + torch.Tensor(np.random.poisson(S_mean.numpy() * mu_true))
+    true_signal = np.random.poisson(S_mean.numpy() * mu_true)
+    Y = Y + torch.Tensor(true_signal)
     
     kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
     G = gp.PoissonGPWithSignal(kernel, U, Y, S_mean,
-            hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max)
+            hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max,
+            num_true_signal=true_signal.sum())
     if best_pars is None:
         G.fit(num_steps=steps, lr=lr, verbose=verbose)
-        best_pars = (G.g.data, G.log_signal.data)
+        best_pars = (G.g.data, G.signal.data)
         if return_pars:
             return best_pars
     G.g = torch.nn.Parameter(best_pars[0].clone())
-    G.log_signal = torch.nn.Parameter(best_pars[1].clone())
-    G.sample(num_samples, verbose=True)
+    G.signal = torch.nn.Parameter(best_pars[1].clone())
+    G.sample(num_samples, verbose=verbose)
 
     return G
 
@@ -138,7 +142,7 @@ def bayes_opt(
     """
     import skopt
     params = [
-            (-11., -4.), # log(epsilon)
+            (-11., -2.), # log(epsilon)
             (1, 30), # L_max
             ]
     print("Performing initial model fit")
@@ -146,7 +150,7 @@ def bayes_opt(
         best_g = fit(box, btags, num_mr_bins, mr_max,
                 k_ell, k_alpha, steps, lr, verbose=verbose, return_g=True)
     else:
-        best_g, best_log_signal = fit_signal(box, btags, sms,
+        best_g, best_signal = fit_signal(box, btags, sms,
                 num_mr_bins, mr_max, k_ell, k_alpha, steps, lr,
                 mu_true=mu_true, return_pars=True, verbose=verbose)
     optimizer = skopt.Optimizer(params)
@@ -167,7 +171,7 @@ def bayes_opt(
                     k_ell, k_alpha, steps, lr, 
                     float(np.exp(next_log_epsilon)), next_L_max,
                     num_samples=num_samples, mu_true=mu_true,
-                    best_pars=(best_g, best_log_signal), verbose=verbose)
+                    best_pars=(best_g, best_signal), verbose=verbose)
             samples = G.samples
         esjd = gp.compute_ESJD(samples, next_L_max, penalize=penalize_L)
         if esjd > 0:
@@ -184,16 +188,17 @@ def bayes_opt(
     print("Best HMC parameter estimate: {}".format(best_params))
     return best_params
 
-def run(box, btags, sms,                                # analysis region
+def run_s_plus_b(box, btags, sms,                       # analysis region
         num_mr_bins, mr_max,                            # fit range 
         k_ell=200, k_alpha=200,                         # kernel parameters
         steps=1000, lr=0.001,                           # fit parameters
         num_opt_samples=500, 
-        opt_iterations=40, penalize_L=True,
+        opt_iterations=30, penalize_L=True,
         mu_true=1.0, num_samples=160000,
-        verbose=True): 
+        runs=1, verbose=True): 
     print("Will first run Bayesian optimization "
-          "on the HMC hyperparameters")
+          "for {} iterations "
+          "on the HMC hyperparameters".format(opt_iterations))
     best_hmc_log_epsilon, best_hmc_L_max = bayes_opt(
             box, btags, num_mr_bins, mr_max,
             k_ell, k_alpha, steps, lr,
@@ -201,13 +206,94 @@ def run(box, btags, sms,                                # analysis region
             opt_iterations, penalize_L,
             sms, mu_true)
     best_hmc_epsilon = float(np.exp(best_hmc_log_epsilon))
-    print("Will do final run of {} samples "
-          "with epsilon = {}, L_max = {}".format
-          (best_hmc_epsilon, best_hmc_L_max))
-    return fit_signal(box, btags, sms,
+    print("Will do {} runs of {} samples "
+            "with epsilon = {:.6f}, L_max = {}".format
+          (runs, num_samples, best_hmc_epsilon, best_hmc_L_max))
+    results = []
+    for i in range(runs):
+        print("Starting run #{}".format(i))
+        results.append(fit_signal(box, btags, sms,
             num_mr_bins, mr_max, k_ell, k_alpha, steps, lr, 
             best_hmc_epsilon, best_hmc_L_max,
-            num_samples, mu_true, verbose=verbose)
+            num_samples, mu_true, verbose=verbose))
+        G = results[-1]
+        samples = G.preds_from_samples()
+        samples_withsignal = G.preds_from_samples(include_signal=True)
+        best_mu = np.percentile([s[0] for s in G.signal_samples], 
+                50)
+        num_fitted_signal = best_mu * G.S.data.numpy().sum()
+        num_true_signal = G.num_true_signal
+        out_name = "{}_{}b_{}_mu-{}_run-{}.png".format(
+            box, btags, sms, mu_true, i)
+        plotting.plot_hist_1d(U=G.U.data, Y=G.Y.data, S=G.S.data * mu_true,
+            samples=samples, samples_withsignal=samples_withsignal, show=False,
+            best_mu=best_mu)
+        plt.savefig(out_name)
+        print("Best-fit signal: {:.3f}".format(best_mu))
+        print("Fitted {:.2f} signal events vs. {:.2f} generated".format(
+            num_fitted_signal, num_true_signal))
+        print("Wrote image file {}".format(out_name))
+    return results
+
+def fit_interpolation(
+        box, btags,                                     # analysis region
+        num_mr_bins, mr_max,                            # fit range 
+        interp_bins,                                    # bins to predict
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        steps=1000, lr=0.001,                           # fit parameters
+        hmc_epsilon=0.0001, hmc_L_max=10,               # HMC parameters
+        num_samples=40000, verbose=False): 
+    """
+    Fits the GP model (with no signal) on the chosen analysis box
+    and interpolates to make predictions for blinded bins
+    """
+    kernel = gp.SquaredExponentialKernel(k_ell, k_alpha)
+    data = get_data(box, btags, num_mr_bins, mr_max)
+    U = data['u']
+    Y = data['y']
+    
+    fit_index = [i for i in range(U.size(0)) if i not in interp_bins]
+    fit_U = U[fit_index]
+    fit_Y = Y[fit_index]
+
+    # perform initial fit
+    G = gp.PoissonLikelihoodGP(kernel, fit_U, fit_Y, 
+            hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max)
+    G.fit(num_steps=steps, lr=lr, verbose=verbose)
+    G.sample(num_samples=num_samples, verbose=verbose)
+    return G
+
+def run_interpolation(
+        box, btags,                                     # analysis region
+        num_mr_bins, mr_max,                            # fit range 
+        interp_bins,                                    # bins to predict
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        steps=1000, lr=0.001,                           # fit parameters
+        hmc_epsilon=0.0001, hmc_L_max=10,               # HMC parameters
+        num_samples=40000, verbose=False): 
+    G = fit_interpolation(box, btags, num_mr_bins, mr_max,
+        interp_bins, k_ell, k_alpha, steps, lr, hmc_epsilon, hmc_L_max,
+        num_samples, verbose) 
+
+    data = get_data(box, btags, num_mr_bins, mr_max)
+    U = data['u']
+    Y = data['y']
+    num_bins = U.size(0)
+    fit_bins = [i for i in range(num_bins) if i not in interp_bins]
+    V = U[interp_bins]
+    Y[interp_bins] = 0. # mask interpolation bins
+
+    fit_preds = G.preds_from_samples()
+    interp_preds = G.predict(V)
+    all_preds = np.zeros((num_samples, num_bins))
+    all_preds[:, interp_bins] = interp_preds
+    all_preds[:, fit_bins] = fit_preds
+    plotting.plot_hist_1d(U=U, Y=Y, samples=all_preds, show=False)
+    out_name = "interpolation_{}_{}b.png".format(box, btags)
+    plt.savefig(out_name)
+    print("Wrote image file {}".format(out_name))
+
+    return G
 
 def make_parser():
     parser = argparse.ArgumentParser()

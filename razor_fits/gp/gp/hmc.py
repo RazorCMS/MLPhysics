@@ -120,6 +120,10 @@ class HamiltonianMC(torch.optim.Optimizer):
         self.rejected_steps += 1
 
     def step(self, closure=None):
+        """
+        Note: returns the values of the loss at the beginning
+        and end of the step (for use with annealed importance sampling)
+        """
         if closure is None:
             raise ValueError("Closure required")
         for group in self.param_groups:
@@ -142,7 +146,7 @@ class HamiltonianMC(torch.optim.Optimizer):
                     raise
                 self.bad_steps += 1
                 self.reject_jump(group, initial_theta)
-                return
+                return initial_loss, initial_loss
             self.phi_step(group, phi, half=True)
             for i in range(1, L+1):
                 self.theta_step(group, phi)
@@ -156,15 +160,17 @@ class HamiltonianMC(torch.optim.Optimizer):
                         raise
                     self.bad_steps += 1
                     self.reject_jump(group, initial_theta)
-                    return
+                    return initial_loss, initial_loss
                 # The last step is a half-step in phi; all other steps are full.
                 self.phi_step(group, phi, half=(i == L))
             r = self.compute_r(initial_loss, loss, initial_phi, phi, group)
             p = min(r, 1)
             if np.random.uniform() < p:
                 self.accept_jump(group)
+                return initial_loss, loss
             else:
                 self.reject_jump(group, initial_theta)
+                return initial_loss, initial_loss
 
     def get_accept_rate(self):
         return self.accepted_steps / (self.accepted_steps + self.rejected_steps)
@@ -188,15 +194,15 @@ def run_hmc(G, parameters, num_samples, verbose=True,
         nlogp = G.neg_log_p()
         nlogp.backward()
         return nlogp
-    if verbose:
-        print("Beginning HMC iterations with epsilon={}, L_max={}".format(
-            epsilon, L_max))
+    print("Beginning HMC iterations with epsilon={}, L_max={}".format(
+        epsilon, L_max))
     for i in range(num_samples):
         if verbose and i % print_every == 0 and i > 0:
             print("{}: Accepted steps: {}, Rejected steps: {} ({} bad)".format(
                 i, hmc.accepted_steps, hmc.rejected_steps, hmc.bad_steps))
         hmc.step(closure)
-    print("Acceptance rate: {:.3f}".format(hmc.get_accept_rate()))
+    print("Acceptance rate: {:.3f} ({} bad samples)".format(
+        hmc.get_accept_rate(), hmc.bad_steps))
     return hmc
 
 def compute_ESJD(samples, L=1, penalize=True):

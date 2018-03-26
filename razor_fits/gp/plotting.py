@@ -52,8 +52,8 @@ def gauss_fit(bin_centers, counts):
 
 def plot_hist_1d(binned=None, U=None, Y=None, S=None, 
         G=None, num_samples=4000, use_noise=False,
-        samples=None, samples_withsignal=None,
-        title=None, verbose=False, log=True):
+        samples=None, samples_withsignal=None, best_mu=None,
+        title=None, verbose=False, log=True, show=True):
     """
     Input: binned data loaded by Razor1DDataset class
         OR torch Tensors U and Y
@@ -86,6 +86,9 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
         best_fit = np.percentile(samples_withsignal, 50, axis=0)
         ax0.plot(centers, best_fit, color='forestgreen', alpha=0.8, linewidth=3,
                 label='GP + Signal Fit')
+    if best_mu is not None:
+        ax0.text(0.55, 0.60, "Best-fit signal strength: {:.3f}".format(best_mu),
+                transform=ax0.transAxes, fontsize=14)
 
     # Best fit and +/- 1, 2 sigma bands
     if G is not None or samples is not None:
@@ -134,7 +137,8 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     ax0.set_ylim(ymin=0.1)
     ax0.legend(fontsize=14)
 
-    plt.show()
+    if show:
+        plt.show()
 
 def plot_nsigma_1d(binned, G=None, samples=None, num_samples=40000,
         use_poisson_noise=False, verbose=False):

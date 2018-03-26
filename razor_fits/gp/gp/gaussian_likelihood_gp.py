@@ -63,12 +63,6 @@ class GaussianLikelihoodGP(GaussianProcess):
         else: # scalar variance
             return cov + noise * Variable(torch.eye(cov.size(0)))
 
-    def lsolve(self, A, B):
-        """
-        Computes the solution X to AX = B.
-        """
-        return torch.gesv(B, A)[0]
-
     def get_mu(self):
         if self.mu is not None:
             return self.mu
