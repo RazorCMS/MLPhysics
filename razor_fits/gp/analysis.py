@@ -1,5 +1,6 @@
 import argparse
 import time
+import bisect
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -10,9 +11,22 @@ import plotting
 import gp
 
 def get_data(box, btags, num_mr_bins, mr_max, proc='TTJets1L'):
-    binned_data = razor_data.get_binned_data_1d(
-            num_mr_bins=num_mr_bins, mr_max=mr_max, proc=proc)
-    test_data = binned_data[box][btags]
+    if proc.lower() == 'fake':
+        binned_data = razor_data.get_binned_data_1d(
+                num_mr_bins=num_mr_bins, mr_max=mr_max)
+        test_data = binned_data[box][btags]
+        U = test_data['u'].numpy()
+        bin_width = U[1] - U[0]
+        # Gaussian resonance 
+        mu = 1000
+        sigma = 50
+        norm = 200
+        test_data['y'] = norm * bin_width * torch.Tensor(
+                plotting.gauss(U, mu, sigma))
+    else:
+        binned_data = razor_data.get_binned_data_1d(
+                num_mr_bins=num_mr_bins, mr_max=mr_max, proc=proc)
+        test_data = binned_data[box][btags]
     return test_data
 
 ### This function is called in parallel by fit() below
@@ -294,6 +308,161 @@ def run_interpolation(
     print("Wrote image file {}".format(out_name))
 
     return G
+
+def fit_annealer(box, btags, num_mr_bins, mr_max, 
+        sms, mu_true=1.0, mu_test=1.0,
+	k_ell=200, k_alpha=200,
+        par_scheduler=None, last_beta=None,
+	num_runs=1, num_hmc_steps=1, num_beta=100,
+	verbose=False, best_params=None):
+    data = get_data(box, btags, num_mr_bins, mr_max)
+    data_sig = get_data(box, btags, num_mr_bins, mr_max, sms)
+    kernel = gp.SquaredExponentialKernel(k_ell, k_alpha)
+    U = data['u']
+    Y = data['y']
+    S_mean = data_sig['y']
+    true_signal = np.random.poisson(S_mean.numpy() * mu_true)
+    Y = Y + torch.Tensor(true_signal)
+
+    # parameter scheduler based on best params from BayesOpt
+    if par_scheduler is None:
+        if best_params is None:
+            raise ValueError(
+                    "Please provide HMC parameters or a scheduler function")
+        betas = sorted([b for b in best_params])
+        def scheduler(beta):
+            if beta <= 0:
+                return best_params[0]
+            if beta >= 1:
+                return best_params[1]
+            # find the two beta nodes we are between
+            beta_index = bisect.bisect_left(betas, beta)
+            beta_low = betas[beta_index - 1]
+            beta_high = betas[beta_index]
+            frac = (beta - beta_low) / (beta_high - beta_low)
+            # interpolate between parameters
+            log_eps_low, K_max_low = best_params[beta_low]
+            log_eps_high, K_max_high = best_params[beta_high]
+            log_eps = log_eps_low + frac * (
+                    log_eps_high - log_eps_low)
+            K_max = K_max_low + frac * (K_max_high - K_max_low)
+            #ret = float(log_eps_low), int(K_max_low)
+            ret = float(log_eps), int(K_max)
+            return ret
+        par_scheduler = scheduler
+
+    G = gp.AnnealingPoissonGP(kernel, U, Y, S_mean, mu=mu_test, 
+            hmc_par_scheduler=par_scheduler,
+            num_true_signal=true_signal.sum())
+    G.sample(num_runs, num_hmc_steps, num_beta, 
+             verbose=verbose, print_every=100, last_beta=last_beta)
+    return G
+
+def bayes_opt_annealing(
+        box, btags,                                     # analysis region
+        num_mr_bins, mr_max,                            # fit range 
+        sms, mu_true=1.0, mu_test=1.0,                  # signal
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        num_runs=100, num_hmc_steps=100, num_beta=1000, # annealing parameters
+        iterations=10, verbose=True, precomputed_pars={},
+        use_acceptance_prob=False):
+    """
+    For the annealed importance sampling algorithm we need to 
+    make good HMC jumps at different annealing temperatures.  
+    The final likelihood is much sharper than the prior so different
+    step sizes will be necessary at each stage. 
+    We will test the HMC jump distance at several values of temperature,
+    letting epsilon change smoothly from node to node.  
+    This function performs Bayesian optimization on the HMC schedule.
+    We will keep the number of leapfrog steps small to avoid
+    very slow annealing.
+    """
+    import skopt
+    params = [
+            (-11., 0.), # log(epsilon)
+            (1, 10), # L_max
+            ]
+    betas_to_optimize = [0, 1e-10, 1e-5, 0.01, 0.05, 0.3, 1.0]
+    best_params = {}
+    for cur_beta in betas_to_optimize:
+        if cur_beta in precomputed_pars:
+            print("Best params for beta = {} are precomputed: {}".format(
+                cur_beta, precomputed_pars[cur_beta]))
+            best_params[cur_beta] = precomputed_pars[cur_beta]
+            continue
+        optimizer = skopt.Optimizer(params)
+        for i in range(iterations):
+            next_params = optimizer.ask()
+            next_log_epsilon, next_L_max = next_params
+            if verbose:
+                print("Beginning step {}: {:.2f} {}".format(i, 
+                    next_log_epsilon, next_L_max))
+            # temporarily put these in here
+            best_params[cur_beta] = (float(next_log_epsilon), 
+                    int(next_L_max))
+            # The annealer uses this function to adapt the HMC parameters
+            # on the fly as beta changes
+            def par_scheduler(beta):
+                if beta <= 0:
+                    return best_params[0]
+                if beta >= 1:
+                    return best_params[1]
+                # find the two beta nodes we are between
+                beta_index = bisect.bisect_left(betas_to_optimize, beta)
+                beta_low = betas_to_optimize[beta_index - 1]
+                beta_high = betas_to_optimize[beta_index]
+                frac = (beta - beta_low) / (beta_high - beta_low)
+                # interpolate between parameters
+                log_eps_low, K_max_low = best_params[beta_low]
+                log_eps_high, K_max_high = best_params[beta_high]
+                log_eps = log_eps_low + frac * (
+                        log_eps_high - log_eps_low)
+                K_max = K_max_low + frac * (K_max_high - K_max_low)
+                ret = float(log_eps), int(K_max)
+                return ret
+            G = fit_annealer(box, btags, num_mr_bins, mr_max,
+                    sms, mu_true, mu_test,
+                    k_ell=k_ell, k_alpha=k_alpha, 
+                    par_scheduler=par_scheduler, last_beta=cur_beta,
+                    num_runs=num_runs, num_hmc_steps=num_hmc_steps,
+                    num_beta=num_beta, verbose=verbose)
+            if use_acceptance_prob:
+                # evaluate based on jump acceptance probability
+                target_prob = 0.63
+                actual_prob = G.annealer.accepted_steps/(
+                        G.annealer.accepted_steps + G.annealer.rejected_steps)
+                metric = (target_prob - actual_prob)**2
+                if verbose:
+                    print("Obtained squared loss {:.5f} (prob = {:.3f}".format(
+                        metric, actual_prob))
+            else:
+                # compute ESJD for each run and average them
+                samples = G.samples
+                esjds = []
+                for r in range(num_runs):
+                    start = r * num_hmc_steps
+                    end = start + num_hmc_steps
+                    r_samples = samples[start:end]
+                    esjds.append(gp.compute_ESJD(r_samples, next_L_max))
+                esjd = np.mean(esjds)
+                # try: multiply by acceptance probability
+                accept_prob = G.annealer.accepted_steps/(
+                        G.annealer.accepted_steps + G.annealer.rejected_steps)
+                if esjd > 0 and accept_prob > 0:
+                    metric = -np.log(esjd * accept_prob / np.sqrt(next_L_max))
+                else:
+                    # -log is infinity
+                    metric = 9999
+                if verbose:
+                    print("Obtained result -log(ESJD) = {}".format(metric))
+            opt_result = optimizer.tell(next_params, metric)
+        best_params[cur_beta] = opt_result.x
+        if verbose:
+            print("Best param estimate for beta={}: {}".format(
+                cur_beta, best_params[cur_beta]))
+    print("Best HMC parameter estimates: {}".format(best_params))
+    return best_params
+
 
 def make_parser():
     parser = argparse.ArgumentParser()

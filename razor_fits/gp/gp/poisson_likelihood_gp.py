@@ -366,15 +366,17 @@ class AnnealingPoissonGP(PoissonGPWithSignal):
     """
 
     def __init__(self, kernel, U, Y, S, mean=None, mu=1.0, 
-            hmc_epsilon=0.0001, hmc_L_max=10, num_true_signal=None):
+            hmc_par_scheduler=None, num_true_signal=None):
         super(AnnealingPoissonGP, self).__init__(kernel, U, Y, S, mean,
-                hmc_epsilon, hmc_L_max, num_true_signal)
+                num_true_signal=num_true_signal)
 
         # fix the signal at the specified value
         self.signal = torch.nn.Parameter(torch.Tensor([mu]), 
                 requires_grad=False)
+        # this instructs the sampler how to adjust the HMC parameters
+        self.hmc_par_scheduler = hmc_par_scheduler
         # this will hold sample importance weights
-        self.importances = []
+        self.log_importances = []
         # this will keep track of the number of samples per annealing run
         self.sample_multiplier = None
 
@@ -386,7 +388,7 @@ class AnnealingPoissonGP(PoissonGPWithSignal):
         """
         ll = self.log_likelihood()
         lp = self.log_prior()
-        return -beta * ll - lp
+        return -Variable(torch.Tensor([beta])) * ll - lp
 
     def preds_from_samples(self, use_noise=False, include_signal=False):
         # create dummy signal strength samples
@@ -394,28 +396,31 @@ class AnnealingPoissonGP(PoissonGPWithSignal):
                 for _ in range(self.samples.shape[0])]
         samples =  super(AnnealingPoissonGP, self).preds_from_samples(
                 use_noise=use_noise, include_signal=include_signal)
-        return samples, self.importances
+        return samples, self.log_importances
 
     def sample_prior(self):
         # The prior is a standard normal for the parameters g.
         return [Variable(torch.randn(self.g.size(0)))]
 
     def sample(self, num_runs=1, num_hmc_samples=1, num_beta=100,
-            verbose=False, abort_on_error=False, print_every=1):
+            verbose=False, abort_on_error=False, print_every=1,
+            last_beta=None):
         """
         Runs the annealing procedure num_runs times.  Each run
         begins with a sample from the prior and ends with a sample
         from the posterior and its importance weight.  
         If num_hmc_samples > 1, the sampled point is used as the 
         beginning point for a standard HMC run of num_hmc_samples steps.
+        If last_beta is provided, annealing will terminate at intermediate
+        temperature last_beta (used for tuning the algorithm).
         """
-        annealer = run_annealing(self, [self.g], num_runs, num_hmc_samples,
-                num_beta, epsilon=self.hmc_epsilon, L_max=self.hmc_L_max,
+        self.annealer = run_annealing(self, [self.g], num_runs, num_hmc_samples,
+                num_beta, par_scheduler=self.hmc_par_scheduler,
                 verbose=verbose, print_every=print_every, 
-                abort_on_error=abort_on_error)
+                abort_on_error=abort_on_error, last_beta=last_beta)
         # we don't have to throw any samples away as warm-up with this algo
-        self.samples = np.asarray([s[0] for s in annealer.samples])
-        self.importances = np.asarray(annealer.importances)
+        self.samples = np.asarray([s[0] for s in self.annealer.samples])
+        self.log_importances = np.asarray(self.annealer.log_importances)
         self.sample_multiplier = num_hmc_samples
         return self.preds_from_samples()
 
@@ -423,7 +428,7 @@ class AnnealingPoissonGP(PoissonGPWithSignal):
         """
         Note: returns estimated marginal likelihood only up to a multiplicative
         constant (useful for computing Bayes factors)
+        by averaging the importance weights.
         """
-        mean = self.importances.mean()
-        std = np.std(self.importances) / np.sqrt(self.importances.shape[0])
-        return mean, std
+        # TODO
+        pass

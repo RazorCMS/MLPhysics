@@ -52,7 +52,7 @@ class HamiltonianMC(torch.optim.Optimizer):
     def phi_step(self, group, phi, half=False):
         coeff = group['epsilon']
         if half:
-            coeff *= 0.5
+            coeff = coeff * 0.5
         grads = self.get_grads(group)
         for p, g in zip(phi, grads):
             dphi = coeff * g
@@ -72,7 +72,7 @@ class HamiltonianMC(torch.optim.Optimizer):
         log_p_phi = 0
         for phi_1, phi_L in zip(initial_phi, final_phi):
             try:
-                log_p_phi += phi_1.pow(2).sum() - phi_L.pow(2).sum()
+                log_p_phi = log_p_phi + phi_1.pow(2).sum() - phi_L.pow(2).sum()
             except RuntimeError:
                 # This may occasionally overflow if phi gets too large.
                 # It will only happen for the final phi value (the initial
