@@ -463,6 +463,37 @@ def bayes_opt_annealing(
     print("Best HMC parameter estimates: {}".format(best_params))
     return best_params
 
+def run_signal_scan(
+        box, btags, sms,                                # analysis region
+        num_mr_bins, mr_max,                            # fit range
+        k_ell=200, k_alpha=200,                         # kernel parameters
+        steps=1000, lr=0.001,                           # fit parameters
+        mu_min=-1.0, mu_max=5.0, mu_step=0.05, mu_true=1.0,
+        verbose=False): 
+    """
+    Scans the signal strength from mu_min to mu_max.
+    At each point, performs a fit and gets the resulting GP.
+    """
+    data = get_data(box, btags, num_mr_bins, mr_max)
+    data_sig = get_data(box, btags, num_mr_bins, mr_max, 
+                             proc=sms)
+    U = data['u']
+    # fix the random signal realization for all runs
+    S_mean = data_sig['y']
+    true_signal = np.random.poisson(S_mean.numpy() * mu_true)
+    Y = data['y'] + torch.Tensor(true_signal)
+    kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
+    Gs = []
+    for mu in np.arange(mu_min, mu_max, mu_step):
+        if verbose:
+            print("Fitting GP with signal = {:.3f}".format(mu))
+        G = gp.PoissonGPWithSignal(kernel, U, Y, S_mean,
+                num_true_signal=true_signal.sum())
+        G.signal = torch.nn.Parameter(torch.Tensor([mu]), requires_grad=False)
+        G.fit(num_steps=steps, lr=lr, verbose=False,
+                parameters=[G.g])
+        Gs.append(G)
+    return Gs
 
 def make_parser():
     parser = argparse.ArgumentParser()
