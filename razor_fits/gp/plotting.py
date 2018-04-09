@@ -50,10 +50,10 @@ def gauss_fit(bin_centers, counts):
 
 ### PLOTTING FUNCTIONS
 
-def plot_hist_1d(binned=None, U=None, Y=None, S=None, 
+def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
         G=None, num_samples=4000, use_noise=False,
         samples=None, samples_withsignal=None, best_mu=None,
-        title=None, verbose=False, log=True, show=True):
+        title=None, verbose=False, log=True, show=True, ymin=0.1):
     """
     Input: binned data loaded by Razor1DDataset class
         OR torch Tensors U and Y
@@ -75,6 +75,11 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     ax0 = plt.subplot(gs[0, 0])
     ax1 = plt.subplot(gs[1, 0])
 
+    # Variational inducing point positions
+    if Z is not None:
+        for x in Z.numpy():
+            ax0.axvline(x=x, alpha=0.3)
+
     # Shaded signal shape histogram
     if S is not None:
         signal = S.numpy()
@@ -94,7 +99,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     if G is not None or samples is not None:
         quantiles = [2.5, 16, 50, 84, 97.5]
         if samples is None:
-            samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
+            samples = [G.sample(x, num_samples=num_samples, 
                 use_noise=use_noise) for x in binned['u']]
             bands = {q:[np.percentile(s, q) for s in samples] for q in quantiles}
         else:
@@ -134,7 +139,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None,
     if log:
         ax0.set_yscale('log')
     ax0.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
-    ax0.set_ylim(ymin=0.1)
+    ax0.set_ylim(ymin=ymin)
     ax0.legend(fontsize=14)
 
     if show:
@@ -157,11 +162,11 @@ def plot_nsigma_1d(binned, G=None, samples=None, num_samples=40000,
     if samples is None:
         if use_poisson_noise:
             samples = [G.sample(x, num_samples=num_samples, 
-                use_noise=True, verbose=verbose,
+                use_noise=True, 
                 poisson_noise_vector=torch.Tensor([float(counts[i])])) 
                 for i, x in enumerate(centers)]
         else:
-            samples = [G.sample(x, num_samples=num_samples, verbose=verbose,
+            samples = [G.sample(x, num_samples=num_samples, 
                 use_noise=True) for x in centers]
     nsigma = compute_nsigma(counts, samples)
     if np.isinf(nsigma).any():
