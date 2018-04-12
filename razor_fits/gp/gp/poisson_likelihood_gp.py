@@ -182,12 +182,15 @@ class PoissonLikelihoodGP(GaussianProcess):
         return -ll - lp
 
     def fit(self, num_steps=1000, verbose=True, lr=0.0001,
-            parameters=None):
+            parameters=None, adam=False):
         # LBFGS does not do a good job of fitting the kernel parameters.
         # We leave them fixed and optimize the latent function values.
         if parameters is None:
             parameters = [self.g]
-        optim = torch.optim.LBFGS(parameters, lr=lr)
+        if adam:
+            optim = torch.optim.Adam(parameters, lr=lr)
+        else:
+            optim = torch.optim.LBFGS(parameters, lr=lr)
         clip = 500
         def closure():
             optim.zero_grad()
@@ -198,7 +201,8 @@ class PoissonLikelihoodGP(GaussianProcess):
             return nlogp
         for i in range(num_steps):
             nlogp = closure()
-            optim.step(closure)
+            if not adam:
+                optim.step(closure)
             if verbose and i % 100 == 0:
                 print("Iteration {} of {}".format(i, num_steps))
         self.clear()
@@ -364,11 +368,11 @@ class PoissonGPWithSignal(PoissonLikelihoodGP):
         return (Y * mean.log() - mean).sum()
 
     def fit(self, num_steps=1000, verbose=False, lr=0.0001,
-            parameters=None):
+            parameters=None, adam=False):
         if parameters is None:
             parameters = [self.g, self.signal]
         super(PoissonGPWithSignal, self).fit(num_steps, verbose=verbose,
-                lr=lr, parameters=parameters)
+                lr=lr, parameters=parameters, adam=adam)
 
     def preds_from_samples(self, use_noise=False, include_signal=False):
         mean_samples = super(PoissonGPWithSignal, self).preds_from_samples(
@@ -492,24 +496,14 @@ class VariationalPoissonGP(GaussianProcess):
         super(VariationalPoissonGP, self).__init__(kernel, U, Y, mean)
         if Z is None:
             Z = U.clone().unsqueeze(1)
-            default_Z = True
-        else:
-            default_Z = False
         self.log_Z = torch.nn.Parameter(Z.log(), requires_grad=train_Z)
         self.train_Z = train_Z
         self.clear()
 
-        if default_Z:
-            if initial_m is None:
-                initial_m = (Y + 0.001).log().clone().unsqueeze(1)
-            initial_S_chol_lower = self.get_L().tril(-1).clone().data / 10000
-            initial_S_chol_log_diag = (
-                    self.get_L().diagonal().clone().data - 10)
-        else:
-            if initial_m is None:
-                initial_m = torch.zeros(Z.size())
-            initial_S_chol_lower = torch.zeros((Z.size(0), Z.size(0))) 
-            initial_S_chol_log_diag = torch.ones(Z.size(0)) - 8
+        if initial_m is None:
+            initial_m = torch.zeros(Z.size())
+        initial_S_chol_lower = torch.zeros((Z.size(0), Z.size(0))) 
+        initial_S_chol_log_diag = torch.ones(Z.size(0)) - 8
 
         self.m = torch.nn.Parameter(initial_m)
         # We learn the posterior covariance matrix S by
@@ -668,31 +662,7 @@ class VariationalPoissonGP(GaussianProcess):
         """
         return -self.variational_expectation() + self.variational_kl()
 
-    def fit(self, num_steps=1000, lr=0.01, verbose=False):
-        to_train = [self.m, self.S_chol_lower, self.S_chol_log_diag]
-        if self.train_Z:
-            to_train.append(self.log_Z)
-        optim = torch.optim.LBFGS(to_train, lr=lr)
-        clip = 10
-        Z_clip = 1
-        def closure():
-            optim.zero_grad()
-            self.clear()
-            neg_elbo = self.neg_elbo()
-            neg_elbo.backward()
-            torch.nn.utils.clip_grad_norm([self.m, self.S_chol_lower, 
-                self.S_chol_log_diag], clip)
-            torch.nn.utils.clip_grad_norm([self.log_Z], Z_clip)
-            return neg_elbo
-        for i in range(num_steps):
-            closure()
-            optim.step(closure) 
-            if verbose and i % 100 == 0:
-                print("Iteration {}: -ELBO = {:.3f}".format(
-                    i, self.neg_elbo().data.numpy()[0]))
-        self.clear()
-
-    def fit_adam(self, num_steps=10000, lr=0.01, verbose=False):
+    def fit(self, num_steps=10000, lr=0.01, verbose=False, clip=None):
         """
         Train using Adam.  Note: this works MUCH better than L-BFGS here
         """
@@ -705,6 +675,8 @@ class VariationalPoissonGP(GaussianProcess):
             self.clear()
             neg_elbo = self.neg_elbo()
             neg_elbo.backward()
+            if clip is not None:
+                torch.nn.utils.clip_grad_norm(to_train, clip)
             return neg_elbo
         for i in range(num_steps):
             closure()
@@ -875,20 +847,13 @@ class DeepVariationalPoissonGP(GaussianProcess):
         Use the deep GP as a kernel by mapping the input points
         to the final GP layer and applying the last layer's kernel function.
         """
+        self.clear()
         at_layer = self.num_layers - 2
         X_embedded = self.predict(X, at_layer=at_layer)
-        Y_embedded = self.predict(Y, at_layer=at_layer)
-        K = self.layers[-1].kernel(X_embedded, Y_embedded)
-        # if it's square, make sure it's positive definite
-        if X.size(0) == Y.size(0):
-            min_eig = torch.min(torch.eig(K)[0][:,0]).data.numpy()[0]
-            if min_eig < 0:
-                if min_eig < -0.1:
-                    print("Warning: min eigenvalue is negative: {}".format(min_eig))
-                epsilon = -10 * min_eig
-            epsilon = Variable(torch.Tensor([epsilon]))
-            noise = epsilon * Variable(torch.eye(X.size(0)))
-            self.K = K + noise
+        if not torch.equal(X, Y):
+            raise NotImplementedError(
+                    "Don't use deep GP kernel to predict new points")
+        K = self.layers[-1].kernel(X_embedded, X_embedded)
         return K
 
     def sample(self, V, num_samples=1, at_layer=None):

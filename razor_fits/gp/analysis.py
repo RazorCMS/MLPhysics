@@ -111,7 +111,7 @@ def fit_signal(
         mu_true=1.0,                                    # signal strength
         best_pars=None, return_pars=False,                    
         verbose=False,
-        kernel_gp=None, scale=1.0): 
+        kernel_gp=None, scale=1.0, adam=False): 
     """
     Performs a signal + background fit using a fixed signal shape.
     Samples from the GP posterior and returns the GP object.
@@ -132,12 +132,11 @@ def fit_signal(
         kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
     else:
         kernel = kernel_gp
-    print(kernel.forward(Variable(U), Variable(U)))
     G = gp.PoissonGPWithSignal(kernel, U, Y, S_mean,
             hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max,
             num_true_signal=true_signal.sum())
     if best_pars is None:
-        G.fit(num_steps=steps, lr=lr, verbose=verbose)
+        G.fit(num_steps=steps, lr=lr, verbose=verbose, adam=adam)
         best_pars = (G.g.data, G.signal.data)
         if return_pars:
             return best_pars
@@ -155,7 +154,7 @@ def bayes_opt(
         num_samples=500, verbose=True,
         iterations=40, penalize_L=True,
         sms=None, mu_true=None,                         # optional signal
-        kernel_gp=None, scale=1.0):                        
+        kernel_gp=None, scale=1.0, max_L=30):                        
     """
     Performs Bayesian optimization of the tunable HMC parameters
     using the skopt package.  
@@ -165,7 +164,7 @@ def bayes_opt(
     import skopt
     params = [
             (-11., -2.), # log(epsilon)
-            (1, 30), # L_max
+            (1, max_L), # L_max
             ]
     print("Performing initial model fit")
     if sms is None:
@@ -515,6 +514,10 @@ def run_s_plus_b_deepkernel(box, btags, sms,            # analysis region
         opt_iterations=30, penalize_L=True,
         mu_true=1.0, num_samples=160000,
         runs=1, verbose=True, scale=0.001): 
+    """
+    Use a fitted deep GP as a kernel for a GP S+B fit using MCMC.
+    Note: not working yet.
+    """
     print("Will first run Bayesian optimization "
           "for {} iterations "
           "on the HMC hyperparameters".format(opt_iterations))
