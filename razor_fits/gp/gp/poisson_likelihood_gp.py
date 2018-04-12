@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import torch
 from torch.autograd import Variable
@@ -486,10 +487,11 @@ class VariationalPoissonGP(GaussianProcess):
         train_Z: bool, True if the inducing point locations should be optimized
     """
 
-    def __init__(self, kernel, U, Y, mean=None, Z=None, train_Z=True):
+    def __init__(self, kernel, U, Y, mean=None, Z=None, train_Z=True, 
+            initial_m=None):
         super(VariationalPoissonGP, self).__init__(kernel, U, Y, mean)
         if Z is None:
-            Z = U.clone()
+            Z = U.clone().unsqueeze(1)
             default_Z = True
         else:
             default_Z = False
@@ -498,18 +500,27 @@ class VariationalPoissonGP(GaussianProcess):
         self.clear()
 
         if default_Z:
-            initial_m = (Y + 0.001).log().clone()
-            initial_S_chol_ = self.get_L().clone().data / 10000
+            if initial_m is None:
+                initial_m = (Y + 0.001).log().clone().unsqueeze(1)
+            initial_S_chol_lower = self.get_L().tril(-1).clone().data / 10000
+            initial_S_chol_log_diag = (
+                    self.get_L().diagonal().clone().data - 10)
         else:
-            initial_m = torch.ones(Z.size(0))
-            initial_S_chol_ = torch.eye(Z.size(0)) / 1000000
+            if initial_m is None:
+                initial_m = torch.zeros(Z.size())
+            initial_S_chol_lower = torch.zeros((Z.size(0), Z.size(0))) 
+            initial_S_chol_log_diag = torch.ones(Z.size(0)) - 8
 
         self.m = torch.nn.Parameter(initial_m)
         # We learn the posterior covariance matrix S by
         # learning its Cholesky decomposition, which is lower
-        # triangular.  We start with a generic matrix (self.S_chol_) and 
+        # triangular.  We start with a generic matrix (self.S_chol_lower) and 
         # then use tril() to force it lower triangular (self.S_chol).
-        self.S_chol_ = torch.nn.Parameter(initial_S_chol_)
+        # The diagonal of the covariance matrix must be positive,
+        # so we parameterize it using a separate vector of 
+        # the logs of the diagonal elements (S_chol_log_diag).
+        self.S_chol_lower = torch.nn.Parameter(initial_S_chol_lower)
+        self.S_chol_log_diag = torch.nn.Parameter(initial_S_chol_log_diag)
 
         self.clear()
 
@@ -531,14 +542,15 @@ class VariationalPoissonGP(GaussianProcess):
     def get_S_chol(self):
         if self.S_chol is not None:
             return self.S_chol
-        self.S_chol = torch.tril(self.S_chol_)
+        self.S_chol = torch.tril(self.S_chol_lower, -1)
+        self.S_chol = self.S_chol + torch.diag(self.S_chol_log_diag.exp())
         return self.S_chol
 
     def get_raw_K(self):
         if self.raw_K is not None:
             return self.raw_K
         Z = self.get_Z()
-        self.raw_K = self.kernel.forward(Z, Z)
+        self.raw_K = self.kernel.forward(Z.squeeze(), Z.squeeze())
         return self.raw_K
 
     def get_epsilon(self):
@@ -590,19 +602,19 @@ class VariationalPoissonGP(GaussianProcess):
         d = self.m - self.get_mu()
 
         mu_X = self.mean(X)
-        K_ZX = self.kernel.forward(Z, X)
+        K_ZX = self.kernel.forward(Z.squeeze(), X.squeeze())
         A = self.lsolve(L, K_ZX)
         alpha = self.lsolve(L, d)
 
-        return (mu_X + torch.mm(A.t(), alpha))[:, 0]
+        return (mu_X + torch.mm(A.t(), alpha).squeeze())
 
     def predict_cov(self, X):
         S_chol = self.get_S_chol()
         Z = self.get_Z()
         L = self.get_L()
 
-        K_XX = self.kernel.forward(X, X)
-        K_ZX = self.kernel.forward(Z, X)
+        K_XX = self.kernel.forward(X.squeeze(), X.squeeze())
+        K_ZX = self.kernel.forward(Z.squeeze(), X.squeeze())
         A = self.lsolve(L, K_ZX)
 
         term1 = K_XX
@@ -657,7 +669,7 @@ class VariationalPoissonGP(GaussianProcess):
         return -self.variational_expectation() + self.variational_kl()
 
     def fit(self, num_steps=1000, lr=0.01, verbose=False):
-        to_train = [self.m, self.S_chol_]
+        to_train = [self.m, self.S_chol_lower, self.S_chol_log_diag]
         if self.train_Z:
             to_train.append(self.log_Z)
         optim = torch.optim.LBFGS(to_train, lr=lr)
@@ -668,7 +680,8 @@ class VariationalPoissonGP(GaussianProcess):
             self.clear()
             neg_elbo = self.neg_elbo()
             neg_elbo.backward()
-            torch.nn.utils.clip_grad_norm([self.m, self.S_chol_], clip)
+            torch.nn.utils.clip_grad_norm([self.m, self.S_chol_lower, 
+                self.S_chol_log_diag], clip)
             torch.nn.utils.clip_grad_norm([self.log_Z], Z_clip)
             return neg_elbo
         for i in range(num_steps):
@@ -680,7 +693,10 @@ class VariationalPoissonGP(GaussianProcess):
         self.clear()
 
     def fit_adam(self, num_steps=10000, lr=0.01, verbose=False):
-        to_train = [self.m, self.S_chol_]
+        """
+        Train using Adam.  Note: this works MUCH better than L-BFGS here
+        """
+        to_train = [self.m, self.S_chol_lower, self.S_chol_log_diag]
         if self.train_Z:
             to_train.append(self.log_Z)
         optim = torch.optim.Adam(to_train, lr=lr)
@@ -697,4 +713,186 @@ class VariationalPoissonGP(GaussianProcess):
                 print("Iteration {}: -ELBO = {:.3f}".format(
                     i, self.neg_elbo().data.numpy()[0]))
         self.clear()
+
+
+# torch adam optimizer with bells and whistles removed
+# (here primarily to make debugging easier)
+class MyAdam(torch.optim.Adam):
+    def step(self):
+        loss = None
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                grad = p.grad.data
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p.data)
+                    state['exp_avg_sq'] = torch.zeros_like(p.data)
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                beta1, beta2 = group['betas']
+                state['step'] += 1
+                exp_avg.mul_(beta1).add_(1 - beta1, grad)
+                exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                denom = exp_avg_sq.sqrt().add_(group['eps'])
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
+                p.data.addcdiv_(-step_size, exp_avg, denom)
+        return loss
+
+
+def identity_mean(X):
+    """
+    Use the identity function as the prior mean for the 
+    internal deep GP layers.
+    """
+    return X
+
+
+class DeepGPLayer(VariationalPoissonGP):
+    """
+    One layer of a deep variational GP.
+    Keeps its own variational inducing point locations,
+    and function values with uncertainties at each inducing point.
+    """
+
+    def __init__(self, kernel, Z, last=False, initial_m=None):
+        # Use the identity as the mean function for internal layers
+        if last:
+            mean = None
+        else:
+            mean = identity_mean
+            if initial_m is None:
+                initial_m = Z.clone()
+        super(DeepGPLayer, self).__init__(kernel, None, None, mean=mean,
+                Z=Z, train_Z=True, initial_m=initial_m)
+
+    def variational_expectation(self):
+        raise NotImplementedError("Individual layers do not compute this term")
+
+    def neg_elbo(self):
+        raise NotImplementedError("Individual layers do not compute the ELBO")
+
+    def predict(self, X):
+        """
+        Samples the output of the layer at the given input position(s).
+        """
+        mean = self.predict_mean(X)
+        var = self.predict_cov(X).diag()
+        eps = Variable(torch.randn(X.size(0)))
+        return mean + eps * var.sqrt()
+
+
+class DeepVariationalPoissonGP(GaussianProcess):
+    """
+    Deep GP with an independent variational approximation at each layer.
+    From Salimbeni and Deisenroth, "Doubly Stochastic Variational Inference
+    for Deep Gaussian Processes", 2017.
+    Attributes:
+        num_layers: depth of the GP (1 = standard GP)
+        layers: list of DeepGPLayer objects that form the model
+    """
+
+    def __init__(self, kernel, U, Y, num_layers=1):
+        super(DeepVariationalPoissonGP, self).__init__(kernel, U, Y)
+
+        # Initialize all inducing point positions to the data positions
+        self.num_layers = num_layers
+        self.layers = []
+        for i in range(num_layers):
+            if i == num_layers - 1:
+                last = True
+                initial_m = (Y + 0.001).log().unsqueeze(1).clone()
+            else:
+                last = False
+                initial_m = None
+            self.layers.append(DeepGPLayer(kernel, U.clone().unsqueeze(1), 
+                last=last, initial_m=initial_m))
+        self.clear()
+
+    def clear(self):
+        for layer in self.layers:
+            layer.clear()
+
+    def predict(self, X, at_layer=None):
+        """
+        Note: this is a stochastic prediction obtained by sampling 
+        the output of each GP layer in sequence.
+        at_layer: which GP layer to sample from.  (default: the last layer)
+        """
+        if at_layer is None:
+            at_layer = self.num_layers - 1
+        for layer in self.layers[:at_layer+1]:
+            X = layer.predict(X)
+        return X
+
+    def log_likelihood(self, y, log_f): 
+        """Poisson likelihood"""
+        return (y * log_f - log_f.exp()).sum()
+
+    def variational_expectation(self):
+        log_f = self.predict(self.U)
+        ll = self.log_likelihood(self.Y, log_f)
+        return ll
+
+    def variational_kl(self):
+        kl = Variable(torch.Tensor([0]))
+        for layer in self.layers:
+            kl = kl + layer.variational_kl()
+        return kl
+
+    def neg_elbo(self):
+        return -self.variational_expectation() + self.variational_kl()
+
+    def fit(self, num_steps=10000, lr=0.01, verbose=True, print_every=100,
+            clip=0.1):
+        """
+        Use Adam because it works better than 
+        L-BFGS for the variational case
+        """
+        pars = []
+        for i, layer in enumerate(self.layers):
+            pars += [layer.m, layer.S_chol_lower, layer.S_chol_log_diag]
+            pars.append(layer.log_Z)
+        optim = MyAdam(pars, lr=lr)
+        for i in range(num_steps):
+            optim.zero_grad()
+            self.clear()
+            neg_elbo = self.neg_elbo()
+            neg_elbo.backward()
+            torch.nn.utils.clip_grad_norm(pars, clip)
+            optim.step()
+            if verbose and i % print_every == 0:
+                print("Iteration {}: -ELBO = {:.3f}".format(
+                    i, self.neg_elbo().data.numpy()[0]))
+        print("Final loss = {:.3f}".format(self.neg_elbo().data.numpy()[0]))
+        self.clear()
+
+    def forward(self, X, Y):
+        """
+        Use the deep GP as a kernel by mapping the input points
+        to the final GP layer and applying the last layer's kernel function.
+        """
+        at_layer = self.num_layers - 2
+        X_embedded = self.predict(X, at_layer=at_layer)
+        Y_embedded = self.predict(Y, at_layer=at_layer)
+        K = self.layers[-1].kernel(X_embedded, Y_embedded)
+        # if it's square, make sure it's positive definite
+        if X.size(0) == Y.size(0):
+            min_eig = torch.min(torch.eig(K)[0][:,0]).data.numpy()[0]
+            if min_eig < 0:
+                if min_eig < -0.1:
+                    print("Warning: min eigenvalue is negative: {}".format(min_eig))
+                epsilon = -10 * min_eig
+            epsilon = Variable(torch.Tensor([epsilon]))
+            noise = epsilon * Variable(torch.eye(X.size(0)))
+            self.K = K + noise
+        return K
+
+    def sample(self, V, num_samples=1, at_layer=None):
+        V = Variable(V)
+        return np.stack([self.predict(V, at_layer=at_layer).data.numpy() 
+            for _ in range(num_samples)])
 

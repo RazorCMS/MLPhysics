@@ -53,7 +53,9 @@ def gauss_fit(bin_centers, counts):
 def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
         G=None, num_samples=4000, use_noise=False,
         samples=None, samples_withsignal=None, best_mu=None,
-        title=None, verbose=False, log=True, show=True, ymin=0.1):
+        title=None, verbose=False, log=True, show=True, ymin=0.1,
+        adjust_domain=False, adjust_range=True,
+        x_scale=None, y_scale=None):
     """
     Input: binned data loaded by Razor1DDataset class
         OR torch Tensors U and Y
@@ -62,18 +64,23 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
     to overlay on the data.
     Alternatively, provide a list of samples directly.
     Optionally provide a signal shape to superimpose on the plot.
+    Set adjust_domain to True to widen the plot domain to include
+        all the inducing point locations.
+    Set adjust_range to False to not impose a minimum y value.
     """
     if binned is None: # make our binned dataset out of U and Y
         binned = {'u':U, 'y':Y}
     centers = binned['u'].numpy()
     bin_width = centers[1] - centers[0]
     edges = centers - bin_width / 2
-    counts = binned['y'].numpy()
+    try:
+        counts = binned['y'].numpy()
+    except AttributeError: # no Y provided
+        counts = None
 
     fig = plt.figure(figsize=(8, 8))
     gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1]) 
     ax0 = plt.subplot(gs[0, 0])
-    ax1 = plt.subplot(gs[1, 0])
 
     # Variational inducing point positions
     if Z is not None:
@@ -109,38 +116,64 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
         ax0.fill_between(centers, bands[16], bands[84], 
                 facecolor='b', alpha=0.5)
         ax0.plot(centers, bands[50], color='b', label='GP Fit', linewidth=1.5)
-        if samples_withsignal is not None:
-            samples_withnoise = np.random.poisson(samples_withsignal)
+        if counts is not None:
+            if samples_withsignal is not None:
+                samples_withnoise = np.random.poisson(samples_withsignal)
+            else:
+                samples_withnoise = np.random.poisson(samples)
+            nsigma = compute_nsigma(counts, samples_withnoise)
+            ax1 = plt.subplot(gs[1, 0])
+            ax1.bar(edges, nsigma, bin_width, align='edge', color='b',
+                    edgecolor='k')
+            ax1.set_xlabel('MR (GeV)', fontsize=16)
+            ax1.set_ylabel('Significance', fontsize=16)
+            ax1.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
+            ax1.set_ylim(ymin=-3.0, ymax=3.0)
+            ax1.set_yticks(np.arange(-3, 4))
+            ax1.tick_params(labelsize=14)
+            ax1.set_axisbelow(True)
+            ax1.yaxis.grid()
         else:
-            samples_withnoise = np.random.poisson(samples)
-        nsigma = compute_nsigma(counts, samples_withnoise)
-        ax1.bar(edges, nsigma, bin_width, align='edge', color='b',
-                edgecolor='k')
-        ax1.set_xlabel('MR (GeV)', fontsize=16)
-        ax1.set_ylabel('Significance', fontsize=16)
-        ax1.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
-        ax1.set_ylim(ymin=-3.0, ymax=3.0)
-        ax1.set_yticks(np.arange(-3, 4))
-        ax1.tick_params(labelsize=14)
-        ax1.set_axisbelow(True)
-        ax1.yaxis.grid()
+            ax1 = None
         plt.tight_layout()
     else:
         ax0.set_xlabel('MR (GeV)', fontsize=16)
     
     # Data counts
-    ax0.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
-            label='Data')
+    if counts is not None:
+        ax0.errorbar(centers, counts, np.sqrt(counts), xerr=None, fmt='ko',
+                label='Data')
 
     ax0.tick_params(labelsize=14)
-    ax0.set_ylabel('Counts', fontsize=16)
+    if counts is not None:
+        ax0.set_ylabel('Counts', fontsize=16)
+    else:
+        ax0.set_ylabel('Prediction', fontsize=16)
     if title is not None:
         ax0.set_title(title, fontsize=16)
     if log:
         ax0.set_yscale('log')
     ax0.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
-    ax0.set_ylim(ymin=ymin)
+    if Z is not None and adjust_domain:
+        # adjust plot domain to show inducing point locations
+        ax0.set_xlim(xmin=min(edges[0], Z.min()), 
+                xmax=max(edges[-1] + bin_width, Z.max()))
+    if adjust_range:
+        ax0.set_ylim(ymin=ymin)
     ax0.legend(fontsize=14)
+
+    if x_scale is not None:
+        xticks = ax0.get_xticks().tolist()
+        for i in range(len(xticks)):
+            xticks[i] = '{}'.format(int(x_scale * float(xticks[i])))
+        ax0.set_xticklabels(xticks)
+        if ax1 is not None:
+            ax1.set_xticklabels(xticks)
+    if y_scale is not None:
+        yticks = ax0.get_yticks().tolist()
+        for i in range(len(yticks)):
+            yticks[i] = '{}'.format(int(y_scale * float(yticks[i])))
+        ax0.set_yticklabels(yticks)
 
     if show:
         plt.show()

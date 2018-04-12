@@ -19,7 +19,10 @@ class GaussianProcess(torch.nn.Module):
         self.kernel = kernel
         self.U = Variable(U)
         self.Y = Variable(Y)
-        self.B = Y.size()[0]
+        try:
+            self.B = Y.size()[0]
+        except AttributeError: # if no Y
+            self.B = None
         if mean is None:
             mean = torch.zeros_like
         self.mean = mean

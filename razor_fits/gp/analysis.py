@@ -4,13 +4,14 @@ import bisect
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from torch.autograd import Variable
 import torch.multiprocessing as mp
 
 import razor_data
 import plotting
 import gp
 
-def get_data(box, btags, num_mr_bins, mr_max, proc='TTJets1L'):
+def get_data(box, btags, num_mr_bins, mr_max, proc='TTJets1L', scale=1.0):
     if proc.lower() == 'fake':
         binned_data = razor_data.get_binned_data_1d(
                 num_mr_bins=num_mr_bins, mr_max=mr_max)
@@ -27,6 +28,7 @@ def get_data(box, btags, num_mr_bins, mr_max, proc='TTJets1L'):
         binned_data = razor_data.get_binned_data_1d(
                 num_mr_bins=num_mr_bins, mr_max=mr_max, proc=proc)
         test_data = binned_data[box][btags]
+        test_data['u'] = test_data['u'] * scale
     return test_data
 
 ### This function is called in parallel by fit() below
@@ -108,16 +110,17 @@ def fit_signal(
         num_samples=40000, 
         mu_true=1.0,                                    # signal strength
         best_pars=None, return_pars=False,                    
-        verbose=False): 
+        verbose=False,
+        kernel_gp=None, scale=1.0): 
     """
     Performs a signal + background fit using a fixed signal shape.
     Samples from the GP posterior and returns the GP object.
     Access the samples via G.preds_from_samples().
     (note: gave up on multiprocessing for now.)
     """
-    data = get_data(box, btags, num_mr_bins, mr_max)
+    data = get_data(box, btags, num_mr_bins, mr_max, scale=scale)
     data_sig = get_data(box, btags, num_mr_bins, mr_max, 
-                             proc=sms)
+                             proc=sms, scale=scale)
     U = data['u']
     Y = data['y']
     # inject signal into the data
@@ -125,7 +128,11 @@ def fit_signal(
     true_signal = np.random.poisson(S_mean.numpy() * mu_true)
     Y = Y + torch.Tensor(true_signal)
     
-    kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
+    if kernel_gp is None:
+        kernel = gp.SquaredExponentialKernel(k_ell, k_alpha, fixed=True)
+    else:
+        kernel = kernel_gp
+    print(kernel.forward(Variable(U), Variable(U)))
     G = gp.PoissonGPWithSignal(kernel, U, Y, S_mean,
             hmc_epsilon=hmc_epsilon, hmc_L_max=hmc_L_max,
             num_true_signal=true_signal.sum())
@@ -147,7 +154,8 @@ def bayes_opt(
         steps=1000, lr=0.001,                           # fit parameters
         num_samples=500, verbose=True,
         iterations=40, penalize_L=True,
-        sms=None, mu_true=None):                        # optional signal
+        sms=None, mu_true=None,                         # optional signal
+        kernel_gp=None, scale=1.0):                        
     """
     Performs Bayesian optimization of the tunable HMC parameters
     using the skopt package.  
@@ -165,8 +173,10 @@ def bayes_opt(
                 k_ell, k_alpha, steps, lr, verbose=verbose, return_g=True)
     else:
         best_g, best_signal = fit_signal(box, btags, sms,
-                num_mr_bins, mr_max, k_ell, k_alpha, steps, lr,
-                mu_true=mu_true, return_pars=True, verbose=verbose)
+                num_mr_bins, mr_max, k_ell=k_ell, k_alpha=k_alpha, 
+                steps=steps, lr=lr,
+                mu_true=mu_true, return_pars=True, verbose=verbose,
+                kernel_gp=kernel_gp, scale=scale)
     optimizer = skopt.Optimizer(params)
     for i in range(iterations):
         next_params = optimizer.ask()
@@ -182,10 +192,12 @@ def bayes_opt(
                     best_g=best_g.clone())
         else:   
             G = fit_signal(box, btags, sms, num_mr_bins, mr_max,
-                    k_ell, k_alpha, steps, lr, 
-                    float(np.exp(next_log_epsilon)), next_L_max,
+                    k_ell=k_ell, k_alpha=k_alpha, steps=steps, lr=lr, 
+                    hmc_epsilon=float(np.exp(next_log_epsilon)), 
+                    hmc_L_max=next_L_max,
                     num_samples=num_samples, mu_true=mu_true,
-                    best_pars=(best_g, best_signal), verbose=verbose)
+                    best_pars=(best_g, best_signal), verbose=verbose,
+                    kernel_gp=kernel_gp, scale=scale)
             samples = G.samples
         esjd = gp.compute_ESJD(samples, next_L_max, penalize=penalize_L)
         if esjd > 0:
@@ -494,6 +506,57 @@ def run_signal_scan(
                 parameters=[G.g])
         Gs.append(G)
     return Gs
+
+def run_s_plus_b_deepkernel(box, btags, sms,            # analysis region
+        num_mr_bins, mr_max,                            # fit range 
+        kernel_gp,                                      # deep GP to use as kernel
+        steps=1000, lr=0.001,                           # parameters for initial fit
+        num_opt_samples=500, 
+        opt_iterations=30, penalize_L=True,
+        mu_true=1.0, num_samples=160000,
+        runs=1, verbose=True, scale=0.001): 
+    print("Will first run Bayesian optimization "
+          "for {} iterations "
+          "on the HMC hyperparameters".format(opt_iterations))
+    best_hmc_log_epsilon, best_hmc_L_max = bayes_opt(
+            box, btags, num_mr_bins, mr_max,
+            steps=steps, lr=lr, kernel_gp=kernel_gp,
+            num_samples=num_opt_samples, verbose=verbose, 
+            iterations=opt_iterations, penalize_L=penalize_L,
+            sms=sms, mu_true=mu_true, scale=scale)
+    best_hmc_epsilon = float(np.exp(best_hmc_log_epsilon))
+    print("Will do {} runs of {} samples "
+            "with epsilon = {:.6f}, L_max = {}".format
+          (runs, num_samples, best_hmc_epsilon, best_hmc_L_max))
+    results = []
+    for i in range(runs):
+        print("Starting run #{}".format(i))
+        results.append(fit_signal(box, btags, sms,
+            num_mr_bins, mr_max, 
+            kernel_gp=kernel_gp, steps=steps, lr=lr, 
+            best_hmc_epsilon=best_hmc_epsilon, 
+            best_hmc_L_max=best_hmc_L_max,
+            num_samples=num_samples, mu_true=mu_true, verbose=verbose,
+            scale=scale))
+        G = results[-1]
+        samples = G.preds_from_samples()
+        samples_withsignal = G.preds_from_samples(include_signal=True)
+        best_mu = np.percentile([s[0] for s in G.signal_samples], 
+                50)
+        num_fitted_signal = best_mu * G.S.data.numpy().sum()
+        num_true_signal = G.num_true_signal
+        out_name = "{}_{}b_{}_mu-{}_run-{}.png".format(
+            box, btags, sms, mu_true, i)
+        plotting.plot_hist_1d(U=G.U.data, Y=G.Y.data, S=G.S.data * mu_true,
+            samples=samples, samples_withsignal=samples_withsignal, show=False,
+            best_mu=best_mu, x_scale=scale)
+        plt.savefig(out_name)
+        print("Best-fit signal: {:.3f}".format(best_mu))
+        print("Fitted {:.2f} signal events vs. {:.2f} generated".format(
+            num_fitted_signal, num_true_signal))
+        print("Wrote image file {}".format(out_name))
+    return results
+
 
 def make_parser():
     parser = argparse.ArgumentParser()
