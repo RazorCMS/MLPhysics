@@ -21,7 +21,10 @@ def get_disc_or_minusone(event, disc_lookup):
     if available in the lookup dictionary (second argument).
     Returns -1 if the event is not available.
     """
-    return disc_lookup.get((event.run, event.lumi, event.event), -1)
+    e = event.event
+    if e < 0:
+        e = e + 2**32
+    return disc_lookup.get((event.run, event.lumi, e), -1)
 
 def fill_discriminator(oldTree, newTree, disc_lookup, s,
         start=0, end=-1):
@@ -46,6 +49,8 @@ def fill_discriminator(oldTree, newTree, disc_lookup, s,
         s.disc = get_disc_or_minusone(oldTree, disc_lookup)
         if s.disc > -1:
             newTree.Fill()
+        else:
+            print "Event fails cut", oldTree.run, oldTree.event, oldTree.lumi
 
 
 if __name__ == '__main__':
@@ -123,7 +128,7 @@ if __name__ == '__main__':
     # Write to a new ROOT file in the local directory
     out_bkg_name = os.path.basename(args.in_name).replace(
             '.root', '_BDT_{}of{}.root'.format(
-                args.chunk, num_chunks))
+                args.chunk+1, num_chunks))
     out_bkg = root.TFile(out_bkg_name, 'RECREATE')
     out_bkg_tree = bkgTree.CloneTree(0)
 
