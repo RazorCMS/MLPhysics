@@ -14,6 +14,15 @@ from sklearn.metrics import accuracy_score, roc_curve
 import ROOT as root
 import root_pandas as rp
 
+def passes_skim(event):
+    if event.pho1Pt < 0:
+        return False
+    if abs(event.pho1Eta) > 1.479:
+        return False
+    if event.pho1isPromptPhoton != 0:
+        return False
+    return True
+
 def get_disc_or_minusone(event, disc_lookup):
     """
     Checks the event ID (run/lumi/event) from the tree (first argument)
@@ -42,15 +51,20 @@ def fill_discriminator(oldTree, newTree, disc_lookup, s,
     """
     if end < 0:
         end = oldTree.GetEntries()
+    neg_ones = 0
     for i in range(start, end):
         oldTree.GetEntry(i)
         if i % 1000 == 0:
             print "Processing event {}".format(i)
+        if not passes_skim(oldTree):
+            continue
         s.disc = get_disc_or_minusone(oldTree, disc_lookup)
         if s.disc > -1:
             newTree.Fill()
         else:
-            print "Event fails cut", oldTree.run, oldTree.event, oldTree.lumi
+            neg_ones += 1
+    if neg_ones:
+        print "Note: left {} events out of the tree because disc = -1".format(neg_ones)
 
 
 if __name__ == '__main__':
@@ -63,6 +77,12 @@ if __name__ == '__main__':
             help='Number of input events to read per job')
     parser.add_argument('--chunk', type=int, default=0,
             help='Which chunk # to run on (0-indexed)')
+    # Use --training-file to provide the original QCD
+    # file used to train the BDT.  Events that were part
+    # of the BDT training sample will receive discriminator
+    # values of -1
+    parser.add_argument('--training-file', 
+            help='Background file that was used to train the BDT')
     args = parser.parse_args()
 
     # Get tree for output
@@ -109,21 +129,45 @@ if __name__ == '__main__':
     # Get numpy array from pandas data frame
     x = df.values
     x_reduced = x[:,var_indices] # use this for BDT
-    x_index = x[:,id_var_indices] # use this to give each event an ID
 
     # Read in model saved from previous running of BDT
     infile = open("model.pkl","rb")
     model = pickle.load(infile)
 
-    # make prediction for input data
-    y_pred = model.predict_proba(x_reduced)[:, 1]
+    # If no training file is provided, get the discriminator
+    # values by running the BDT.  Otherwise, get them directly
+    # from the training file.
+    if args.training_file is not None:
+        print "Reading external ROOT file used to train the BDT"
+        ref_df = rp.read_root(args.training_file, tree_name,
+                columns=id_variables+['disc'])
+        id_var_indices = [
+                ref_df.columns.get_loc(v) for v in id_variables]
+        disc_index = ref_df.columns.get_loc('disc')
+        x_index = ref_df.values[:, id_var_indices]
+        y_pred = ref_df.values[:, disc_index]
+        print "Length of reference dataframe", len(x_index), len(y_pred)
+    else:
+        x_index = x[:,id_var_indices] 
+        y_pred = model.predict_proba(x_reduced)[:, 1]
 
     # Create a lookup table for discriminator value by event number
+    x_index = x_index.astype(int)
     disc_lookup = {}
+    repeats = 0
     for disc_val, run, lumi, event in zip(
             y_pred, x_index[:,0], 
             x_index[:,1], x_index[:,2]):
-        disc_lookup[(run, lumi, event)] = disc_val
+        # When running on files that include multiple MC samples
+        # hadded together, repeated event IDs are possible.
+        if (run, lumi, event) in disc_lookup:
+            repeats += 1
+            disc_lookup[(run, lumi, event)] = -1
+        else:
+            disc_lookup[(run, lumi, event)] = disc_val
+    if repeats:
+        print "Note: there were {} repeated events.".format(repeats)
+        print "For safety, setting disc = -1 for those events."
 
     # Write to a new ROOT file in the local directory
     out_bkg_name = os.path.basename(args.in_name).replace(
