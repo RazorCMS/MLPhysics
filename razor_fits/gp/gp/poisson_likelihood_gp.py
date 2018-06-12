@@ -48,6 +48,8 @@ def gauss_kl(mu1, chol1, mu2, chol2):
 
     return 0.5 * (term1 + term2 + term3 + term4)
 
+def is_nan(x):
+    return np.isnan(np.sum(x.cpu().numpy()))
 
 class PoissonLikelihoodGP(GaussianProcess):
     """
@@ -680,7 +682,10 @@ class VariationalPoissonGP(GaussianProcess):
             return neg_elbo
         for i in range(num_steps):
             closure()
-            optim.step() 
+            optim.step()
+            if is_nan(self.neg_elbo().data):
+                print("Iteration {}: -ELBO = NaN".format(i))
+                break
             if verbose and i % 100 == 0:
                 print("Iteration {}: -ELBO = {:.3f}".format(
                     i, self.neg_elbo().data.numpy()[0]))
@@ -836,6 +841,9 @@ class DeepVariationalPoissonGP(GaussianProcess):
             neg_elbo.backward()
             torch.nn.utils.clip_grad_norm(pars, clip)
             optim.step()
+            if is_nan(self.neg_elbo().data):
+                print("Iteration {}: -ELBO = NaN".format(i))
+                break
             if verbose and i % print_every == 0:
                 print("Iteration {}: -ELBO = {:.3f}".format(
                     i, self.neg_elbo().data.numpy()[0]))
