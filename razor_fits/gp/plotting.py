@@ -55,7 +55,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
         samples=None, samples_withsignal=None, best_mu=None,
         title=None, verbose=False, log=True, show=True, ymin=0.1,
         adjust_domain=False, adjust_range=True,
-        x_scale=None, y_scale=None):
+        x_scale=None, y_scale=None, x_label='MR (GeV)'):
     """
     Input: binned data loaded by Razor1DDataset class
         OR torch Tensors U and Y
@@ -125,7 +125,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
             ax1 = plt.subplot(gs[1, 0])
             ax1.bar(edges, nsigma, bin_width, align='edge', color='b',
                     edgecolor='k')
-            ax1.set_xlabel('MR (GeV)', fontsize=16)
+            ax1.set_xlabel(x_label, fontsize=16)
             ax1.set_ylabel('Significance', fontsize=16)
             ax1.set_xlim(xmin=edges[0], xmax=edges[-1] + bin_width)
             ax1.set_ylim(ymin=-3.0, ymax=3.0)
@@ -137,7 +137,7 @@ def plot_hist_1d(binned=None, U=None, Y=None, S=None, Z=None,
             ax1 = None
         plt.tight_layout()
     else:
-        ax0.set_xlabel('MR (GeV)', fontsize=16)
+        ax0.set_xlabel(x_label, fontsize=16)
     
     # Data counts
     if counts is not None:
